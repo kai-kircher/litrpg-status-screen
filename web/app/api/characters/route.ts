@@ -5,6 +5,7 @@ export async function GET(request: Request) {
   try {
     const { searchParams } = new URL(request.url);
     const search = searchParams.get('search');
+    const limit = searchParams.get('limit');
 
     let query = `
       SELECT id, name, aliases, created_at
@@ -12,13 +13,20 @@ export async function GET(request: Request) {
     `;
 
     const params: any[] = [];
+    let paramIndex = 1;
 
     if (search) {
-      query += ` WHERE LOWER(name) LIKE LOWER($1)`;
+      query += ` WHERE LOWER(name) LIKE LOWER($${paramIndex})`;
       params.push(`%${search}%`);
+      paramIndex++;
     }
 
     query += ` ORDER BY name ASC`;
+
+    if (limit) {
+      query += ` LIMIT $${paramIndex}`;
+      params.push(parseInt(limit));
+    }
 
     const result = await pool.query(query, params);
 

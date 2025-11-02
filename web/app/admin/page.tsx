@@ -42,7 +42,18 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadEvents();
+    loadTopCharacters();
   }, [statusFilter, offset]);
+
+  const loadTopCharacters = async () => {
+    try {
+      const response = await fetch('/api/characters?limit=5');
+      const data = await response.json();
+      setCharacters(data);
+    } catch (err) {
+      console.error('Error loading top characters:', err);
+    }
+  };
 
   const loadEvents = async () => {
     try {
@@ -72,7 +83,8 @@ export default function AdminPage() {
 
   const searchCharacters = async (term: string) => {
     if (!term) {
-      setCharacters([]);
+      // When search is cleared, reload top 5 characters
+      loadTopCharacters();
       return;
     }
 
