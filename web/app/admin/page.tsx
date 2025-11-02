@@ -46,6 +46,16 @@ export default function AdminPage() {
     loadTopCharacters();
   }, [statusFilter, offset]);
 
+  // Debounce search - reload events 300ms after user stops typing
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setOffset(0); // Reset to first page when searching
+      loadEvents();
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [eventFilter]);
+
   const loadTopCharacters = async () => {
     try {
       const response = await fetch('/api/characters?limit=5');
@@ -69,6 +79,11 @@ export default function AdminPage() {
         url += '&assigned=true&processed=true';
       }
       // 'all' doesn't add any filters
+
+      // Add search parameter if present
+      if (eventFilter) {
+        url += `&search=${encodeURIComponent(eventFilter)}`;
+      }
 
       const response = await fetch(url);
       const data = await response.json();
@@ -134,22 +149,10 @@ export default function AdminPage() {
   };
 
   const toggleSelectAll = () => {
-    // Get visible/filtered events
-    const visibleEvents = events.filter((event) => {
-      if (!eventFilter) return true;
-      const searchLower = eventFilter.toLowerCase();
-      return (
-        event.raw_text.toLowerCase().includes(searchLower) ||
-        event.chapter_number.toLowerCase().includes(searchLower) ||
-        event.event_type.toLowerCase().includes(searchLower) ||
-        (event.character_name && event.character_name.toLowerCase().includes(searchLower))
-      );
-    });
-
-    if (selectedEventIds.size === visibleEvents.length && visibleEvents.length > 0) {
+    if (selectedEventIds.size === events.length && events.length > 0) {
       setSelectedEventIds(new Set());
     } else {
-      setSelectedEventIds(new Set(visibleEvents.map(e => e.id)));
+      setSelectedEventIds(new Set(events.map(e => e.id)));
     }
   };
 
@@ -274,17 +277,6 @@ export default function AdminPage() {
     }
   };
 
-  // Filter events based on search term
-  const filteredEvents = events.filter((event) => {
-    if (!eventFilter) return true;
-    const searchLower = eventFilter.toLowerCase();
-    return (
-      event.raw_text.toLowerCase().includes(searchLower) ||
-      event.chapter_number.toLowerCase().includes(searchLower) ||
-      event.event_type.toLowerCase().includes(searchLower) ||
-      (event.character_name && event.character_name.toLowerCase().includes(searchLower))
-    );
-  });
 
   if (loading) {
     return (
@@ -360,10 +352,10 @@ export default function AdminPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">
-                Events ({total})
-                {eventFilter && (
+                Events
+                {eventFilter && total > 0 && (
                   <span className="text-sm text-gray-500 ml-2">
-                    ({filteredEvents.length} filtered)
+                    ({total} matching)
                   </span>
                 )}
               </h2>
@@ -373,17 +365,17 @@ export default function AdminPage() {
             </div>
 
             {/* Selection Controls */}
-            {statusFilter === 'unassigned' && filteredEvents.length > 0 && (
+            {statusFilter === 'unassigned' && events.length > 0 && (
               <div className="flex items-center justify-between mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={selectedEventIds.size === filteredEvents.length && filteredEvents.length > 0}
+                    checked={selectedEventIds.size === events.length && events.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 text-indigo-600"
                   />
                   <span className="text-sm font-medium">
-                    Select All Visible
+                    Select All on Page
                   </span>
                 </label>
                 {selectedEventIds.size > 0 && (
@@ -413,7 +405,7 @@ export default function AdminPage() {
             </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {filteredEvents.map((event) => (
+              {events.map((event) => (
                 <div
                   key={event.id}
                   className={`border rounded-lg p-4 transition ${
@@ -523,7 +515,7 @@ export default function AdminPage() {
                 </div>
               ))}
 
-              {filteredEvents.length === 0 && (
+              {events.length === 0 && (
                 <p className="text-gray-500 text-center py-8">
                   {eventFilter ? 'No events match your search' : 'No events found'}
                 </p>

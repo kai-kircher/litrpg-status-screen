@@ -9,6 +9,7 @@ export async function GET(request: Request) {
     const eventType = searchParams.get('type');
     const assigned = searchParams.get('assigned');
     const processed = searchParams.get('processed');
+    const search = searchParams.get('search');
 
     let query = `
       SELECT
@@ -52,6 +53,17 @@ export async function GET(request: Request) {
       paramIndex++;
     }
 
+    if (search) {
+      query += ` AND (
+        LOWER(re.raw_text) LIKE LOWER($${paramIndex}) OR
+        LOWER(c.chapter_number) LIKE LOWER($${paramIndex}) OR
+        LOWER(re.event_type) LIKE LOWER($${paramIndex}) OR
+        LOWER(ch.name) LIKE LOWER($${paramIndex})
+      )`;
+      params.push(`%${search}%`);
+      paramIndex++;
+    }
+
     query += ` ORDER BY c.chapter_number ASC, re.id ASC`;
     query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
@@ -59,7 +71,13 @@ export async function GET(request: Request) {
     const result = await pool.query(query, params);
 
     // Get total count
-    let countQuery = 'SELECT COUNT(*) FROM raw_events re WHERE 1=1';
+    let countQuery = `
+      SELECT COUNT(*)
+      FROM raw_events re
+      JOIN chapters c ON re.chapter_id = c.id
+      LEFT JOIN characters ch ON re.character_id = ch.id
+      WHERE 1=1
+    `;
     const countParams: any[] = [];
     let countParamIndex = 1;
 
@@ -78,6 +96,17 @@ export async function GET(request: Request) {
     if (eventType) {
       countQuery += ` AND re.event_type = $${countParamIndex}`;
       countParams.push(eventType);
+      countParamIndex++;
+    }
+
+    if (search) {
+      countQuery += ` AND (
+        LOWER(re.raw_text) LIKE LOWER($${countParamIndex}) OR
+        LOWER(c.chapter_number) LIKE LOWER($${countParamIndex}) OR
+        LOWER(re.event_type) LIKE LOWER($${countParamIndex}) OR
+        LOWER(ch.name) LIKE LOWER($${countParamIndex})
+      )`;
+      countParams.push(`%${search}%`);
     }
 
     const countResult = await pool.query(countQuery, countParams);
