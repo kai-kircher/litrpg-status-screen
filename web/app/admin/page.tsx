@@ -32,6 +32,7 @@ export default function AdminPage() {
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [expandedContexts, setExpandedContexts] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
+  const [eventFilter, setEventFilter] = useState('');
   const [newCharacterName, setNewCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState<'unassigned' | 'ready_to_process' | 'processed' | 'all'>('unassigned');
@@ -133,10 +134,22 @@ export default function AdminPage() {
   };
 
   const toggleSelectAll = () => {
-    if (selectedEventIds.size === events.length) {
+    // Get visible/filtered events
+    const visibleEvents = events.filter((event) => {
+      if (!eventFilter) return true;
+      const searchLower = eventFilter.toLowerCase();
+      return (
+        event.raw_text.toLowerCase().includes(searchLower) ||
+        event.chapter_number.toLowerCase().includes(searchLower) ||
+        event.event_type.toLowerCase().includes(searchLower) ||
+        (event.character_name && event.character_name.toLowerCase().includes(searchLower))
+      );
+    });
+
+    if (selectedEventIds.size === visibleEvents.length && visibleEvents.length > 0) {
       setSelectedEventIds(new Set());
     } else {
-      setSelectedEventIds(new Set(events.map(e => e.id)));
+      setSelectedEventIds(new Set(visibleEvents.map(e => e.id)));
     }
   };
 
@@ -261,6 +274,18 @@ export default function AdminPage() {
     }
   };
 
+  // Filter events based on search term
+  const filteredEvents = events.filter((event) => {
+    if (!eventFilter) return true;
+    const searchLower = eventFilter.toLowerCase();
+    return (
+      event.raw_text.toLowerCase().includes(searchLower) ||
+      event.chapter_number.toLowerCase().includes(searchLower) ||
+      event.event_type.toLowerCase().includes(searchLower) ||
+      (event.character_name && event.character_name.toLowerCase().includes(searchLower))
+    );
+  });
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -280,22 +305,54 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Status Filter */}
-        <div className="mb-6">
-          <label className="block text-sm font-medium mb-2">Filter by Status</label>
-          <select
-            value={statusFilter}
-            onChange={(e) => {
-              setStatusFilter(e.target.value as any);
-              setOffset(0); // Reset to first page when changing filter
-            }}
-            className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="unassigned">Unassigned (needs character assignment)</option>
-            <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
-            <option value="processed">Processed (live in database)</option>
-            <option value="all">All Events</option>
-          </select>
+        {/* Filters */}
+        <div className="mb-6 space-y-4">
+          {/* Status Filter */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Filter by Status</label>
+            <select
+              value={statusFilter}
+              onChange={(e) => {
+                setStatusFilter(e.target.value as any);
+                setOffset(0); // Reset to first page when changing filter
+              }}
+              className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="unassigned">Unassigned (needs character assignment)</option>
+              <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
+              <option value="processed">Processed (live in database)</option>
+              <option value="all">All Events</option>
+            </select>
+          </div>
+
+          {/* Search/Filter Events */}
+          <div>
+            <label className="block text-sm font-medium mb-2">Search Events</label>
+            <div className="relative">
+              <input
+                type="text"
+                value={eventFilter}
+                onChange={(e) => setEventFilter(e.target.value)}
+                placeholder="Filter by text, chapter, character, or type..."
+                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+              />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </div>
+              {eventFilter && (
+                <button
+                  onClick={() => setEventFilter('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -304,6 +361,11 @@ export default function AdminPage() {
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">
                 Events ({total})
+                {eventFilter && (
+                  <span className="text-sm text-gray-500 ml-2">
+                    ({filteredEvents.length} filtered)
+                  </span>
+                )}
               </h2>
               <div className="text-sm text-gray-600">
                 Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
@@ -311,17 +373,17 @@ export default function AdminPage() {
             </div>
 
             {/* Selection Controls */}
-            {statusFilter === 'unassigned' && events.length > 0 && (
+            {statusFilter === 'unassigned' && filteredEvents.length > 0 && (
               <div className="flex items-center justify-between mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="checkbox"
-                    checked={selectedEventIds.size === events.length && events.length > 0}
+                    checked={selectedEventIds.size === filteredEvents.length && filteredEvents.length > 0}
                     onChange={toggleSelectAll}
                     className="w-4 h-4 text-indigo-600"
                   />
                   <span className="text-sm font-medium">
-                    Select All on Page
+                    Select All Visible
                   </span>
                 </label>
                 {selectedEventIds.size > 0 && (
@@ -351,7 +413,7 @@ export default function AdminPage() {
             </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
-              {events.map((event) => (
+              {filteredEvents.map((event) => (
                 <div
                   key={event.id}
                   className={`border rounded-lg p-4 transition ${
@@ -461,9 +523,9 @@ export default function AdminPage() {
                 </div>
               ))}
 
-              {events.length === 0 && (
+              {filteredEvents.length === 0 && (
                 <p className="text-gray-500 text-center py-8">
-                  No events found
+                  {eventFilter ? 'No events match your search' : 'No events found'}
                 </p>
               )}
             </div>
