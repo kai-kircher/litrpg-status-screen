@@ -29,6 +29,7 @@ export default function AdminPage() {
   const [events, setEvents] = useState<RawEvent[]>([]);
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<RawEvent | null>(null);
+  const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [newCharacterName, setNewCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -108,7 +109,56 @@ export default function AdminPage() {
     }
   };
 
+  const toggleEventSelection = (eventId: number) => {
+    const newSelection = new Set(selectedEventIds);
+    if (newSelection.has(eventId)) {
+      newSelection.delete(eventId);
+    } else {
+      newSelection.add(eventId);
+    }
+    setSelectedEventIds(newSelection);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedEventIds.size === events.length) {
+      setSelectedEventIds(new Set());
+    } else {
+      setSelectedEventIds(new Set(events.map(e => e.id)));
+    }
+  };
+
   const assignEvent = async (characterId: number) => {
+    // Batch assignment if multiple events selected
+    if (selectedEventIds.size > 0) {
+      try {
+        const response = await fetch('/api/admin/assign', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            eventIds: Array.from(selectedEventIds),
+            characterId,
+          }),
+        });
+
+        if (response.ok) {
+          const result = await response.json();
+          alert(`Successfully assigned ${result.count} events`);
+          await loadEvents();
+          setSelectedEventIds(new Set());
+          setSearchTerm('');
+          setCharacters([]);
+        } else {
+          const error = await response.json();
+          alert(`Error: ${error.error}`);
+        }
+      } catch (err) {
+        console.error('Error assigning events:', err);
+        alert('Failed to assign events');
+      }
+      return;
+    }
+
+    // Single assignment (original behavior)
     if (!selectedEvent) return;
 
     try {
@@ -237,6 +287,28 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* Selection Controls */}
+            {statusFilter === 'unassigned' && events.length > 0 && (
+              <div className="flex items-center justify-between mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedEventIds.size === events.length && events.length > 0}
+                    onChange={toggleSelectAll}
+                    className="w-4 h-4 text-indigo-600"
+                  />
+                  <span className="text-sm font-medium">
+                    Select All on Page
+                  </span>
+                </label>
+                {selectedEventIds.size > 0 && (
+                  <span className="text-sm font-semibold text-indigo-700">
+                    {selectedEventIds.size} event{selectedEventIds.size !== 1 ? 's' : ''} selected
+                  </span>
+                )}
+              </div>
+            )}
+
             {/* Pagination Controls */}
             <div className="flex gap-2 mb-4">
               <button
@@ -259,14 +331,31 @@ export default function AdminPage() {
               {events.map((event) => (
                 <div
                   key={event.id}
-                  className={`border rounded-lg p-4 cursor-pointer transition ${
+                  className={`border rounded-lg p-4 transition ${
                     selectedEvent?.id === event.id
                       ? 'border-blue-500 bg-blue-50'
+                      : selectedEventIds.has(event.id)
+                      ? 'border-indigo-500 bg-indigo-50'
                       : 'border-gray-200 hover:border-gray-300'
                   }`}
-                  onClick={() => setSelectedEvent(event)}
                 >
-                  <div className="flex items-start justify-between mb-2">
+                  <div className="flex items-start gap-3">
+                    {/* Checkbox for multi-select (only for unassigned events) */}
+                    {statusFilter === 'unassigned' && (
+                      <input
+                        type="checkbox"
+                        checked={selectedEventIds.has(event.id)}
+                        onChange={(e) => {
+                          e.stopPropagation();
+                          toggleEventSelection(event.id);
+                        }}
+                        className="mt-1 w-4 h-4 text-indigo-600 cursor-pointer"
+                      />
+                    )}
+
+                    {/* Event content */}
+                    <div className="flex-1 cursor-pointer" onClick={() => setSelectedEvent(event)}>
+                      <div className="flex items-start justify-between mb-2">
                     <span
                       className={`px-2 py-1 rounded text-xs font-medium ${getEventTypeColor(
                         event.event_type
@@ -324,6 +413,8 @@ export default function AdminPage() {
                       </div>
                     </div>
                   )}
+                    </div>
+                  </div>
                 </div>
               ))}
 
@@ -339,9 +430,85 @@ export default function AdminPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <h2 className="text-xl font-semibold mb-4">Assign to Character</h2>
 
-            {!selectedEvent ? (
-              <p className="text-gray-500">Select an event from the left to assign it</p>
+            {selectedEventIds.size === 0 && !selectedEvent ? (
+              <p className="text-gray-500">
+                {statusFilter === 'unassigned'
+                  ? 'Select event(s) from the left to assign'
+                  : 'Select an event from the left to assign it'}
+              </p>
+            ) : selectedEventIds.size > 0 ? (
+              /* Bulk assignment mode */
+              <div className="space-y-4">
+                <div className="bg-indigo-50 p-4 rounded border border-indigo-200">
+                  <p className="text-sm text-indigo-900 font-medium mb-1">
+                    Bulk Assignment Mode
+                  </p>
+                  <p className="text-xs text-indigo-700">
+                    Assigning {selectedEventIds.size} event{selectedEventIds.size !== 1 ? 's' : ''} to a character
+                  </p>
+                </div>
+
+                {/* Search/Create Character */}
+                <div>
+                  <label className="block text-sm font-medium mb-2">
+                    Search or Create Character
+                  </label>
+                  <input
+                    type="text"
+                    value={searchTerm}
+                    onChange={(e) => {
+                      setSearchTerm(e.target.value);
+                      searchCharacters(e.target.value);
+                    }}
+                    placeholder="Type character name..."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                </div>
+
+                {/* Character Results */}
+                {characters.length > 0 && (
+                  <div className="border rounded-md max-h-60 overflow-y-auto">
+                    {characters.map((character) => (
+                      <button
+                        key={character.id}
+                        onClick={() => assignEvent(character.id)}
+                        className="w-full text-left px-4 py-2 hover:bg-gray-50 border-b last:border-b-0"
+                      >
+                        <div className="font-medium">{character.name}</div>
+                        {character.aliases && character.aliases.length > 0 && (
+                          <div className="text-xs text-gray-500">
+                            Aliases: {character.aliases.join(', ')}
+                          </div>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Create New Character */}
+                {searchTerm && characters.length === 0 && (
+                  <div className="border-2 border-dashed border-gray-300 rounded-md p-4">
+                    <p className="text-sm text-gray-600 mb-2">Character not found</p>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        value={newCharacterName}
+                        onChange={(e) => setNewCharacterName(e.target.value)}
+                        placeholder="New character name"
+                        className="flex-1 px-3 py-2 border border-gray-300 rounded-md"
+                      />
+                      <button
+                        onClick={createCharacter}
+                        className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             ) : (
+              /* Single assignment mode */
               <div className="space-y-4">
                 <div className="bg-gray-50 p-4 rounded">
                   <p className="text-sm text-gray-600 mb-1">Selected Event:</p>

@@ -3,16 +3,33 @@ import pool from '@/lib/db';
 
 export async function POST(request: Request) {
   try {
-    const { eventId, characterId } = await request.json();
+    const { eventId, eventIds, characterId } = await request.json();
 
-    if (!eventId || !characterId) {
+    if ((!eventId && !eventIds) || !characterId) {
       return NextResponse.json(
-        { error: 'eventId and characterId are required' },
+        { error: 'eventId(s) and characterId are required' },
         { status: 400 }
       );
     }
 
-    // Update the raw_event to assign it to the character
+    // Handle batch assignment
+    if (eventIds && Array.isArray(eventIds)) {
+      const result = await pool.query(
+        `UPDATE raw_events
+         SET character_id = $1, is_assigned = true
+         WHERE id = ANY($2)
+         RETURNING *`,
+        [characterId, eventIds]
+      );
+
+      return NextResponse.json({
+        success: true,
+        count: result.rowCount,
+        events: result.rows,
+      });
+    }
+
+    // Handle single assignment (backwards compatibility)
     const result = await pool.query(
       `UPDATE raw_events
        SET character_id = $1, is_assigned = true
