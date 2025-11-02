@@ -95,7 +95,7 @@ class ChapterScraper:
             chapter_data = self._extract_chapter_data(soup, chapter_number, url)
 
             if chapter_data:
-                logger.info(f"Successfully scraped chapter {chapter_number}: {chapter_data['title']}")
+                logger.info(f"Successfully scraped chapter {chapter_number}: {chapter_data['chapter_number']}")
             else:
                 logger.warning(f"Failed to extract data from chapter {chapter_number}")
 
@@ -215,7 +215,7 @@ class ChapterScraper:
 
         if result:
             logger.info("Scraper test successful!")
-            logger.info(f"Title: {result['title']}")
+            logger.info(f"Chapter: {result['chapter_number']}")
             logger.info(f"Word count: {result['word_count']}")
             logger.info(f"Content preview: {result['content'][:200]}...")
             return True

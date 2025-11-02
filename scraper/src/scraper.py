@@ -301,7 +301,7 @@ class WanderingInnScraper:
             logger.error("Failed to fetch chapter")
             return False
 
-        logger.info(f"Successfully fetched chapter: {chapter_data['title']}")
+        logger.info(f"Successfully fetched chapter: {chapter_data['chapter_number']}")
         logger.info(f"Word count: {chapter_data['word_count']}")
 
         # Test event parsing
