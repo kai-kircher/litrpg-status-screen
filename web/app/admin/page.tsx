@@ -9,6 +9,7 @@ type RawEvent = {
   parsed_data: any;
   context: string;
   is_assigned: boolean;
+  is_processed: boolean;
   character_id: number | null;
   order_index: number;
   chapter_number: string;
@@ -31,7 +32,7 @@ export default function AdminPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [newCharacterName, setNewCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [showAssigned, setShowAssigned] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<'unassigned' | 'ready_to_process' | 'processed' | 'all'>('unassigned');
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
@@ -39,11 +40,23 @@ export default function AdminPage() {
 
   useEffect(() => {
     loadEvents();
-  }, [showAssigned, offset]);
+  }, [statusFilter, offset]);
 
   const loadEvents = async () => {
     try {
-      const response = await fetch(`/api/admin/events?assigned=${showAssigned}&limit=${limit}&offset=${offset}`);
+      let url = `/api/admin/events?limit=${limit}&offset=${offset}`;
+
+      // Build query params based on status filter
+      if (statusFilter === 'unassigned') {
+        url += '&assigned=false';
+      } else if (statusFilter === 'ready_to_process') {
+        url += '&assigned=true&processed=false';
+      } else if (statusFilter === 'processed') {
+        url += '&assigned=true&processed=true';
+      }
+      // 'all' doesn't add any filters
+
+      const response = await fetch(url);
       const data = await response.json();
       setEvents(data.events || []);
       setTotal(data.total || 0);
@@ -194,20 +207,22 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Toggle */}
+        {/* Status Filter */}
         <div className="mb-6">
-          <label className="flex items-center gap-2 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={showAssigned}
-              onChange={(e) => {
-                setShowAssigned(e.target.checked);
-                setOffset(0); // Reset to first page when toggling
-              }}
-              className="w-4 h-4"
-            />
-            <span>Show assigned events</span>
-          </label>
+          <label className="block text-sm font-medium mb-2">Filter by Status</label>
+          <select
+            value={statusFilter}
+            onChange={(e) => {
+              setStatusFilter(e.target.value as any);
+              setOffset(0); // Reset to first page when changing filter
+            }}
+            className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          >
+            <option value="unassigned">Unassigned (needs character assignment)</option>
+            <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
+            <option value="processed">Processed (live in database)</option>
+            <option value="all">All Events</option>
+          </select>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -215,7 +230,7 @@ export default function AdminPage() {
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-semibold">
-                {showAssigned ? 'Assigned Events' : 'Unassigned Events'} ({total})
+                Events ({total})
               </h2>
               <div className="text-sm text-gray-600">
                 Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
@@ -271,17 +286,29 @@ export default function AdminPage() {
                   )}
 
                   {event.character_name && (
-                    <div className="mt-2 flex items-center justify-between">
-                      <span className="text-sm font-medium text-blue-600">
-                        → {event.character_name}
-                      </span>
+                    <div className="mt-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-blue-600">
+                          → {event.character_name}
+                        </span>
+                        {event.is_processed && (
+                          <span className="text-xs px-2 py-0.5 bg-green-100 text-green-800 rounded font-medium">
+                            ✓ Processed
+                          </span>
+                        )}
+                      </div>
                       <div className="flex gap-2">
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
                             processEvent(event.id);
                           }}
-                          className="text-xs px-2 py-1 bg-green-600 text-white rounded hover:bg-green-700"
+                          disabled={event.is_processed}
+                          className={`text-xs px-2 py-1 rounded ${
+                            event.is_processed
+                              ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                              : 'bg-green-600 text-white hover:bg-green-700'
+                          }`}
                         >
                           Process
                         </button>
@@ -302,7 +329,7 @@ export default function AdminPage() {
 
               {events.length === 0 && (
                 <p className="text-gray-500 text-center py-8">
-                  {showAssigned ? 'No assigned events' : 'No unassigned events'}
+                  No events found
                 </p>
               )}
             </div>

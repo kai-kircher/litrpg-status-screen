@@ -8,6 +8,7 @@ export async function GET(request: Request) {
     const offset = parseInt(searchParams.get('offset') || '0');
     const eventType = searchParams.get('type');
     const assigned = searchParams.get('assigned');
+    const processed = searchParams.get('processed');
 
     let query = `
       SELECT
@@ -17,6 +18,7 @@ export async function GET(request: Request) {
         re.parsed_data,
         re.context,
         re.is_assigned,
+        re.is_processed,
         re.character_id,
         c.order_index,
         c.chapter_number,
@@ -35,6 +37,12 @@ export async function GET(request: Request) {
     if (assigned !== null) {
       query += ` AND re.is_assigned = $${paramIndex}`;
       params.push(assigned === 'true');
+      paramIndex++;
+    }
+
+    if (processed !== null) {
+      query += ` AND re.is_processed = $${paramIndex}`;
+      params.push(processed === 'true');
       paramIndex++;
     }
 
@@ -58,6 +66,12 @@ export async function GET(request: Request) {
     if (assigned !== null) {
       countQuery += ` AND re.is_assigned = $${countParamIndex}`;
       countParams.push(assigned === 'true');
+      countParamIndex++;
+    }
+
+    if (processed !== null) {
+      countQuery += ` AND re.is_processed = $${countParamIndex}`;
+      countParams.push(processed === 'true');
       countParamIndex++;
     }
 

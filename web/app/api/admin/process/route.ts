@@ -66,6 +66,12 @@ export async function POST(request: Request) {
         );
     }
 
+    // Mark event as processed
+    await client.query(
+      'UPDATE raw_events SET is_processed = true WHERE id = $1',
+      [eventId]
+    );
+
     await client.query('COMMIT');
 
     return NextResponse.json({
