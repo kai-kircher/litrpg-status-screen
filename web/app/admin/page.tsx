@@ -507,7 +507,7 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : selectedEvent ? (
               /* Single assignment mode */
               <div className="space-y-4">
                 <div className="bg-gray-50 p-4 rounded">
@@ -578,7 +578,7 @@ export default function AdminPage() {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
           </div>
         </div>
       </div>
