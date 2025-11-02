@@ -20,7 +20,7 @@ class Config:
 
     # Scraper configuration
     BASE_URL: str = os.getenv("BASE_URL", "https://wanderinginn.com")
-    REQUEST_DELAY: float = float(os.getenv("REQUEST_DELAY", "2"))
+    REQUEST_DELAY: float = float(os.getenv("REQUEST_DELAY", "10"))  # Respects robots.txt crawl-delay
     START_CHAPTER: int = int(os.getenv("START_CHAPTER", "1"))
     MAX_CHAPTERS: int = int(os.getenv("MAX_CHAPTERS", "0"))
 

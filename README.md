@@ -202,4 +202,4 @@ This is an unofficial fan project. *The Wandering Inn* and all related content a
 
 ---
 
-**Note**: The scraper respects the website's robots.txt and includes rate limiting (2-second delay between requests) to avoid server strain.
+**Note**: The scraper respects the website's robots.txt and includes rate limiting (10-second delay between requests as specified in robots.txt) to avoid server strain.

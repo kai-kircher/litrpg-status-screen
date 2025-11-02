@@ -223,7 +223,7 @@ The parser includes validation to reduce false positives and handles minor forma
 - `get_last_scraped_chapter()` - Resume capability
 
 **Rate Limiting**:
-Default 2-second delay between requests. The initial scrape of thousands of chapters will take hours. The scraper:
+Default 10-second delay between requests (respects robots.txt crawl-delay). The initial scrape of thousands of chapters will take days. The scraper:
 - Stops after 5 consecutive complete failures (not partial)
 - Can be interrupted and resumed safely
 - Skips already-scraped chapters
