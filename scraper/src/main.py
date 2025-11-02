@@ -139,7 +139,9 @@ def fetch(chapter_number):
             sys.exit(1)
 
         click.echo("\n" + "=" * 60)
-        click.echo(f"Chapter {chapter_data['chapter_number']}: {chapter_data['title']}")
+        click.echo(f"Chapter {chapter_data['order_index']}: {chapter_data['chapter_number']}")
+        if chapter_data.get('chapter_title'):
+            click.echo(f"Title: {chapter_data['chapter_title']}")
         click.echo("=" * 60)
         click.echo(f"URL: {chapter_data['url']}")
         click.echo(f"Word count: {chapter_data['word_count']}")
@@ -253,12 +255,12 @@ def show_toc():
             cursor = conn.cursor()
 
             cursor.execute(
-                "SELECT chapter_number, title, url FROM chapters ORDER BY chapter_number LIMIT 5"
+                "SELECT order_index, chapter_number, url FROM chapters ORDER BY order_index LIMIT 5"
             )
             first_chapters = cursor.fetchall()
 
             cursor.execute(
-                "SELECT chapter_number, title, url FROM chapters ORDER BY chapter_number DESC LIMIT 5"
+                "SELECT order_index, chapter_number, url FROM chapters ORDER BY order_index DESC LIMIT 5"
             )
             last_chapters = cursor.fetchall()
 
@@ -266,13 +268,13 @@ def show_toc():
             return_connection(conn)
 
             click.echo("\nFirst 5 chapters:")
-            for num, title, url in first_chapters:
-                click.echo(f"  {num}: {title}")
+            for order_idx, chapter_num, url in first_chapters:
+                click.echo(f"  {order_idx}: {chapter_num}")
                 click.echo(f"     {url}")
 
             click.echo("\nLast 5 chapters:")
-            for num, title, url in reversed(last_chapters):
-                click.echo(f"  {num}: {title}")
+            for order_idx, chapter_num, url in reversed(last_chapters):
+                click.echo(f"  {order_idx}: {chapter_num}")
                 click.echo(f"     {url}")
 
     except Exception as e:

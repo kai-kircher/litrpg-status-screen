@@ -183,12 +183,13 @@ class WanderingInnScraper:
             # Save chapter to database (even if content is empty)
             try:
                 chapter_id = save_chapter(
+                    order_index=chapter_data['order_index'],
                     chapter_number=chapter_data['chapter_number'],
-                    title=chapter_data['title'],
                     url=chapter_data['url'],
                     content=chapter_data.get('content', ''),
                     published_at=chapter_data.get('published_at'),
-                    word_count=chapter_data.get('word_count', 0)
+                    word_count=chapter_data.get('word_count', 0),
+                    chapter_title=chapter_data.get('chapter_title')
                 )
 
                 if not chapter_id:

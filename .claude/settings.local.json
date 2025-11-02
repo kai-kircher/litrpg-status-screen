@@ -30,7 +30,9 @@
       "Bash(git add:*)",
       "Bash(git commit:*)",
       "Bash(git remote add:*)",
-      "Bash(git push:*)"
+      "Bash(git push:*)",
+      "Bash(chmod:*)",
+      "Bash(./setup-env.sh:*)"
     ],
     "deny": [],
     "ask": []

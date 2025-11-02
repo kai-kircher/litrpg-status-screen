@@ -41,17 +41,18 @@ class ChapterScraper:
 
     def fetch_chapter(self, chapter_number: int, url: Optional[str] = None) -> Optional[Dict[str, Any]]:
         """
-        Fetch a chapter by number
+        Fetch a chapter by order_index
 
         Args:
-            chapter_number: Chapter number to fetch
-            url: Optional chapter URL (if None, will attempt to build from chapter_number)
+            chapter_number: Chapter order_index (sequential position) to fetch
+            url: Optional chapter URL (if None, will attempt to get from database)
 
         Returns:
             Dictionary with chapter data or None if failed
             {
-                'chapter_number': int,
-                'title': str,
+                'order_index': int,
+                'chapter_number': str (e.g., "1.00"),
+                'chapter_title': str (optional),
                 'url': str,
                 'content': str,
                 'published_at': datetime or None,
@@ -136,18 +137,23 @@ class ChapterScraper:
         based on The Wandering Inn's actual HTML structure.
         """
         try:
-            # Extract title
+            # Extract title (which contains the chapter number like "1.00")
             # Common selectors: h1.entry-title, .chapter-title, h1.post-title
-            title = None
+            scraped_title = None
             for selector in ['h1.entry-title', '.chapter-title', 'h1.post-title', 'h1']:
                 title_elem = soup.select_one(selector)
                 if title_elem:
-                    title = title_elem.get_text(strip=True)
+                    scraped_title = title_elem.get_text(strip=True)
                     break
 
-            if not title:
+            if not scraped_title:
                 logger.warning(f"Could not find title for chapter {chapter_number}")
-                title = f"Chapter {chapter_number}"
+                scraped_title = f"{chapter_number}"
+
+            # Extract chapter number (e.g., "1.00") from the scraped title
+            # The Wandering Inn format is usually just the chapter number in the title
+            chapter_id = scraped_title
+            chapter_title = None  # Could parse full title if format is "1.00 - Title"
 
             # Extract content
             # Common selectors: .entry-content, .chapter-content, article, .post-content
@@ -181,8 +187,9 @@ class ChapterScraper:
             word_count = len(content.split())
 
             return {
-                'chapter_number': chapter_number,
-                'title': title,
+                'order_index': chapter_number,  # The parameter is actually order_index
+                'chapter_number': chapter_id,    # The scraped chapter identifier (e.g., "1.00")
+                'chapter_title': chapter_title,  # Optional full title
                 'url': url,
                 'content': content,
                 'published_at': published_at,
