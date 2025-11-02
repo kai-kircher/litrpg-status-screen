@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProgressionEvent:
     """Represents a single progression event found in text"""
-    event_type: str  # class_obtained, level_up, skill_obtained, spell_obtained
+    event_type: str  # class_obtained, class_evolution, class_consolidation, level_up, skill_obtained, spell_obtained
     raw_text: str  # Original bracketed text
     parsed_data: Dict[str, Any]  # Structured data
     context: str  # Surrounding text for disambiguation
@@ -29,6 +29,16 @@ class EventParser:
             r'\[([^\]]+?)\s+[Cc]lass\s+[Oo]btained!?\]',
             r'\[([^\]]+?)\s+[Cc]lass\s+[Gg]ained!?\]',
             r'\[([^\]]+?)\s+[Cc]lass\s+[Aa]cquired!?\]',
+        ],
+        'class_evolution': [
+            # Matches: [Warrior → Weapon Expert Class!]
+            # Also matches: [Class A -> Class B Class!]
+            r'\[([^\]]+?)\s*[→>-]+\s*([^\]]+?)\s+[Cc]lass!?\]',
+        ],
+        'class_consolidation': [
+            # Matches: [Warrior + Soldier Class Consolidated!]
+            # Also matches: [Class A + Class B Class Consolidated!]
+            r'\[([^\]]+?)\s*\+\s*([^\]]+?)\s+[Cc]lass\s+[Cc]onsolidated!?\]',
         ],
         'level_up': [
             r'\[([^\]]+?)\s+[Ll]evel\s+(\d+)!?\]',
@@ -166,6 +176,35 @@ class EventParser:
                     logger.debug(f"Empty class name in: {raw_text}")
                     return None
                 parsed_data = {'class_name': class_name}
+
+            elif event_type == 'class_evolution':
+                if match.lastindex < 2:
+                    logger.debug(f"Insufficient groups in class_evolution match: {raw_text}")
+                    return None
+                old_class = match.group(1).strip()
+                new_class = match.group(2).strip()
+                if not old_class or not new_class:
+                    logger.debug(f"Empty class name in class evolution: {raw_text}")
+                    return None
+                parsed_data = {
+                    'old_class': old_class,
+                    'new_class': new_class
+                }
+
+            elif event_type == 'class_consolidation':
+                if match.lastindex < 2:
+                    logger.debug(f"Insufficient groups in class_consolidation match: {raw_text}")
+                    return None
+                # Could be multiple classes consolidating, but for now handle two
+                class_1 = match.group(1).strip()
+                class_2 = match.group(2).strip()
+                if not class_1 or not class_2:
+                    logger.debug(f"Empty class name in class consolidation: {raw_text}")
+                    return None
+                parsed_data = {
+                    'old_classes': [class_1, class_2],
+                    'consolidated': True
+                }
 
             elif event_type == 'level_up':
                 if match.lastindex < 2:
@@ -328,12 +367,15 @@ class EventParser:
         stats = {
             'total': len(events),
             'class_obtained': 0,
+            'class_evolution': 0,
+            'class_consolidation': 0,
             'level_up': 0,
             'skill_obtained': 0,
             'spell_obtained': 0,
         }
 
         for event in events:
-            stats[event.event_type] += 1
+            if event.event_type in stats:
+                stats[event.event_type] += 1
 
         return stats
