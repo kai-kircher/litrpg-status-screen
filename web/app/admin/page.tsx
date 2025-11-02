@@ -30,6 +30,7 @@ export default function AdminPage() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<RawEvent | null>(null);
   const [selectedEventIds, setSelectedEventIds] = useState<Set<number>>(new Set());
+  const [expandedContexts, setExpandedContexts] = useState<Set<number>>(new Set());
   const [searchTerm, setSearchTerm] = useState('');
   const [newCharacterName, setNewCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
@@ -125,6 +126,16 @@ export default function AdminPage() {
     } else {
       setSelectedEventIds(new Set(events.map(e => e.id)));
     }
+  };
+
+  const toggleContext = (eventId: number) => {
+    const newExpanded = new Set(expandedContexts);
+    if (newExpanded.has(eventId)) {
+      newExpanded.delete(eventId);
+    } else {
+      newExpanded.add(eventId);
+    }
+    setExpandedContexts(newExpanded);
   };
 
   const assignEvent = async (characterId: number) => {
@@ -372,6 +383,26 @@ export default function AdminPage() {
                     <p className="text-xs text-gray-600">
                       {JSON.stringify(event.parsed_data)}
                     </p>
+                  )}
+
+                  {/* Context toggle and display */}
+                  {event.context && (
+                    <div className="mt-2">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleContext(event.id);
+                        }}
+                        className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                      >
+                        {expandedContexts.has(event.id) ? '▼' : '▶'} Show Context
+                      </button>
+                      {expandedContexts.has(event.id) && (
+                        <div className="mt-2 p-3 bg-gray-50 rounded border border-gray-200 text-xs text-gray-700 whitespace-pre-wrap max-h-40 overflow-y-auto">
+                          {event.context}
+                        </div>
+                      )}
+                    </div>
                   )}
 
                   {event.character_name && (
