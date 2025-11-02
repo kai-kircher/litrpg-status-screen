@@ -21,12 +21,20 @@ type ProgressionEvent = {
   spells: string[];
 };
 
+type CharacterSummary = {
+  classes: { class_name: string; level: number | null; chapter_number: string }[];
+  skills: string[];
+  spells: string[];
+};
+
 export default function Home() {
   const [characters, setCharacters] = useState<Character[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
   const [selectedCharacter, setSelectedCharacter] = useState<number | null>(null);
   const [maxChapter, setMaxChapter] = useState<number | null>(null);
   const [progression, setProgression] = useState<ProgressionEvent[]>([]);
+  const [summary, setSummary] = useState<CharacterSummary | null>(null);
+  const [viewMode, setViewMode] = useState<'timeline' | 'summary'>('timeline');
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -36,12 +44,16 @@ export default function Home() {
     loadChapters();
   }, []);
 
-  // Load progression when character or chapter changes
+  // Load data when character, chapter, or view mode changes
   useEffect(() => {
     if (selectedCharacter) {
-      loadProgression();
+      if (viewMode === 'timeline') {
+        loadProgression();
+      } else {
+        loadSummary();
+      }
     }
-  }, [selectedCharacter, maxChapter]);
+  }, [selectedCharacter, maxChapter, viewMode]);
 
   const loadCharacters = async () => {
     try {
@@ -77,6 +89,25 @@ export default function Home() {
       setProgression(data);
     } catch (err) {
       console.error('Error loading progression:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadSummary = async () => {
+    if (!selectedCharacter) return;
+
+    setLoading(true);
+    try {
+      const url = maxChapter
+        ? `/api/character-summary?characterId=${selectedCharacter}&maxOrderIndex=${maxChapter}`
+        : `/api/character-summary?characterId=${selectedCharacter}`;
+
+      const response = await fetch(url);
+      const data = await response.json();
+      setSummary(data);
+    } catch (err) {
+      console.error('Error loading summary:', err);
     } finally {
       setLoading(false);
     }
@@ -179,6 +210,32 @@ export default function Home() {
             </div>
           </div>
 
+          {/* View Mode Toggle */}
+          {selectedCharacter && (
+            <div className="flex items-center justify-center gap-2 pt-2">
+              <button
+                onClick={() => setViewMode('timeline')}
+                className={`px-4 py-2 rounded font-medium transition-colors ${
+                  viewMode === 'timeline'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                Timeline View
+              </button>
+              <button
+                onClick={() => setViewMode('summary')}
+                className={`px-4 py-2 rounded font-medium transition-colors ${
+                  viewMode === 'summary'
+                    ? 'bg-indigo-600 text-white'
+                    : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                }`}
+              >
+                Summary View
+              </button>
+            </div>
+          )}
+
           {/* Filter/Search */}
           <div className="pt-1">
             <div className="relative">
@@ -237,14 +294,15 @@ export default function Home() {
           </div>
         )}
 
-        {!loading && selectedCharacter && filteredProgression.length === 0 && (
+        {!loading && selectedCharacter && viewMode === 'timeline' && filteredProgression.length === 0 && (
           <div className="bg-gray-800 rounded-lg border border-gray-700 p-8 text-center">
             <p className="text-gray-400">No progression data found</p>
             <p className="text-gray-500 text-sm mt-1">Try selecting a different character or adjusting your filters</p>
           </div>
         )}
 
-        {!loading && filteredProgression.length > 0 && (
+        {/* Timeline View */}
+        {!loading && viewMode === 'timeline' && filteredProgression.length > 0 && (
           <div className="space-y-4">
             {filteredProgression.map((event, idx) => (
               <div
@@ -300,6 +358,82 @@ export default function Home() {
                 </div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* Summary View */}
+        {!loading && viewMode === 'summary' && summary && (
+          <div className="bg-gray-800 rounded-lg border border-gray-700 p-6">
+            {/* Classes Section */}
+            {summary.classes.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold mb-4 text-indigo-300">Classes</h3>
+                <div className="space-y-2">
+                  {summary.classes.map((cls, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 bg-purple-900/20 border border-purple-800/40 rounded px-4 py-3"
+                    >
+                      <span className="inline-flex items-center gap-1 bg-purple-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
+                        CLASS
+                      </span>
+                      <span className="text-white font-medium text-lg">{cls.class_name}</span>
+                      {cls.level !== null && (
+                        <span className="ml-auto text-purple-300 font-semibold text-lg">Level {cls.level}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Skills Section */}
+            {summary.skills.length > 0 && (
+              <div className="mb-6">
+                <h3 className="text-2xl font-bold mb-4 text-indigo-300">Skills</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {summary.skills.map((skill, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 bg-green-900/20 border border-green-800/40 rounded px-3 py-2"
+                    >
+                      <span className="inline-flex items-center gap-1 bg-green-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
+                        SKILL
+                      </span>
+                      <span className="text-white">{skill}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Spells Section */}
+            {summary.spells.length > 0 && (
+              <div>
+                <h3 className="text-2xl font-bold mb-4 text-indigo-300">Spells</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                  {summary.spells.map((spell, idx) => (
+                    <div
+                      key={idx}
+                      className="flex items-center gap-2 bg-blue-900/20 border border-blue-800/40 rounded px-3 py-2"
+                    >
+                      <span className="inline-flex items-center gap-1 bg-blue-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
+                        SPELL
+                      </span>
+                      <span className="text-white">{spell}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Empty state */}
+            {summary.classes.length === 0 && summary.skills.length === 0 && summary.spells.length === 0 && (
+              <div className="text-center py-8">
+                <p className="text-gray-400">No progression data found</p>
+                <p className="text-gray-500 text-sm mt-1">Try selecting a different character or chapter range</p>
+              </div>
+            )}
           </div>
         )}
       </div>
