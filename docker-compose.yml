@@ -1,0 +1,94 @@
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: wandering-inn-db
+    environment:
+      POSTGRES_USER: wandering_inn
+      POSTGRES_PASSWORD: dev_password_change_in_production
+      POSTGRES_DB: wandering_inn_tracker
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "54320:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./database:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wandering_inn -d wandering_inn_tracker"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  # Scraper Service
+  scraper:
+    build:
+      context: ./scraper
+      dockerfile: Dockerfile
+    container_name: wandering-inn-scraper
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wandering_inn_tracker
+      DB_USER: wandering_inn
+      DB_PASSWORD: dev_password_change_in_production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - default
+    profiles:
+      - scraper  # Only starts when explicitly requested
+
+  # Web Application
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: wandering-inn-web
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wandering_inn_tracker
+      DB_USER: wandering_inn
+      DB_PASSWORD: dev_password_change_in_production
+      NODE_ENV: production
+    ports:
+      - "3000:3000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - default
+    profiles:
+      - web  # Only starts when explicitly requested
+
+  # pgAdmin for database management (optional)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: wandering-inn-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@wandering-inn.local
+      PGADMIN_DEFAULT_PASSWORD: admin
+      PGADMIN_CONFIG_SERVER_MODE: 'False'
+    ports:
+      - "5050:80"
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - tools  # Only starts when explicitly requested
+
+volumes:
+  postgres_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+
+networks:
+  default:
+    name: wandering-inn-network

@@ -1,0 +1,35 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(netstat:*)",
+      "Bash(docker inspect:*)",
+      "Bash(tasklist:*)",
+      "Bash(sc query:*)",
+      "Bash(sc stop:*)",
+      "Bash(docker-compose config:*)",
+      "Bash(docker-compose:*)",
+      "Bash(npm run build:*)",
+      "Bash(npx create-next-app@latest:*)",
+      "Bash(timeout 5 docker-compose logs:*)",
+      "Bash(exit 0)",
+      "Bash(curl:*)",
+      "Bash(timeout 3 bash:*)",
+      "Bash(docker exec:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(timeout 3 docker-compose logs:*)",
+      "Bash(docker network:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker container prune:*)",
+      "Bash(docker logs:*)",
+      "Bash(test:*)",
+      "Bash(npm install)",
+      "Bash(python -m src.main:*)",
+      "Bash(cat:*)",
+      "Bash(git init:*)",
+      "Bash(git add:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
