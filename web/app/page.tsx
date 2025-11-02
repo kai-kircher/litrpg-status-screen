@@ -303,6 +303,19 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      {/* Footer with Buy Me a Coffee */}
+      <div className="max-w-4xl mx-auto px-4 pb-8">
+        <div className="text-center">
+          <a href="https://www.buymeacoffee.com/kaitane" target="_blank" rel="noopener noreferrer">
+            <img
+              src="https://img.buymeacoffee.com/button-api/?text=Buy me a coffee&emoji=&slug=kaitane&button_colour=BD5FFF&font_colour=ffffff&font_family=Cookie&outline_colour=000000&coffee_colour=FFDD00"
+              alt="Buy Me A Coffee"
+              className="inline-block"
+            />
+          </a>
+        </div>
+      </div>
     </div>
   );
 }
