@@ -33,16 +33,20 @@ export default function AdminPage() {
   const [loading, setLoading] = useState(true);
   const [showAssigned, setShowAssigned] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [total, setTotal] = useState(0);
+  const limit = 100;
 
   useEffect(() => {
     loadEvents();
-  }, [showAssigned]);
+  }, [showAssigned, offset]);
 
   const loadEvents = async () => {
     try {
-      const response = await fetch(`/api/admin/events?assigned=${showAssigned}&limit=100`);
+      const response = await fetch(`/api/admin/events?assigned=${showAssigned}&limit=${limit}&offset=${offset}`);
       const data = await response.json();
       setEvents(data.events || []);
+      setTotal(data.total || 0);
       setLoading(false);
     } catch (err) {
       console.error('Error loading events:', err);
@@ -196,7 +200,10 @@ export default function AdminPage() {
             <input
               type="checkbox"
               checked={showAssigned}
-              onChange={(e) => setShowAssigned(e.target.checked)}
+              onChange={(e) => {
+                setShowAssigned(e.target.checked);
+                setOffset(0); // Reset to first page when toggling
+              }}
               className="w-4 h-4"
             />
             <span>Show assigned events</span>
@@ -206,9 +213,32 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Events List */}
           <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-semibold mb-4">
-              {showAssigned ? 'Assigned Events' : 'Unassigned Events'} ({events.length})
-            </h2>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">
+                {showAssigned ? 'Assigned Events' : 'Unassigned Events'} ({total})
+              </h2>
+              <div className="text-sm text-gray-600">
+                Showing {offset + 1}-{Math.min(offset + limit, total)} of {total}
+              </div>
+            </div>
+
+            {/* Pagination Controls */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setOffset(Math.max(0, offset - limit))}
+                disabled={offset === 0}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setOffset(offset + limit)}
+                disabled={offset + limit >= total}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {events.map((event) => (
