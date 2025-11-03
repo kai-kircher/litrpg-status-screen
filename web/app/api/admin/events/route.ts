@@ -10,6 +10,7 @@ export async function GET(request: Request) {
     const assigned = searchParams.get('assigned');
     const processed = searchParams.get('processed');
     const search = searchParams.get('search');
+    const archived = searchParams.get('archived');
 
     let query = `
       SELECT
@@ -21,6 +22,7 @@ export async function GET(request: Request) {
         re.is_assigned,
         re.is_processed,
         re.character_id,
+        re.archived,
         c.order_index,
         c.chapter_number,
         c.chapter_title,
@@ -34,6 +36,14 @@ export async function GET(request: Request) {
 
     const params: any[] = [];
     let paramIndex = 1;
+
+    // Filter out archived events by default unless explicitly requesting them
+    if (archived === 'true') {
+      query += ` AND re.archived = TRUE`;
+    } else if (archived === 'false' || archived === null) {
+      query += ` AND re.archived = FALSE`;
+    }
+    // If archived === 'all', no filter is applied
 
     if (assigned !== null) {
       query += ` AND re.is_assigned = $${paramIndex}`;
@@ -80,6 +90,13 @@ export async function GET(request: Request) {
     `;
     const countParams: any[] = [];
     let countParamIndex = 1;
+
+    // Apply same archived filter to count
+    if (archived === 'true') {
+      countQuery += ` AND re.archived = TRUE`;
+    } else if (archived === 'false' || archived === null) {
+      countQuery += ` AND re.archived = FALSE`;
+    }
 
     if (assigned !== null) {
       countQuery += ` AND re.is_assigned = $${countParamIndex}`;

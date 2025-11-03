@@ -32,7 +32,8 @@
       "Bash(git remote add:*)",
       "Bash(git push:*)",
       "Bash(chmod:*)",
-      "Bash(./setup-env.sh:*)"
+      "Bash(./setup-env.sh:*)",
+      "Bash(git rebase:*)"
     ],
     "deny": [],
     "ask": []

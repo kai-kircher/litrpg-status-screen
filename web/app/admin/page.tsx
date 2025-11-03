@@ -11,6 +11,7 @@ type RawEvent = {
   is_assigned: boolean;
   is_processed: boolean;
   character_id: number | null;
+  archived: boolean;
   order_index: number;
   chapter_number: string;
   chapter_title: string | null;
@@ -35,7 +36,7 @@ export default function AdminPage() {
   const [eventFilter, setEventFilter] = useState('');
   const [newCharacterName, setNewCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'unassigned' | 'ready_to_process' | 'processed' | 'all'>('unassigned');
+  const [statusFilter, setStatusFilter] = useState<'unassigned' | 'ready_to_process' | 'processed' | 'archived' | 'all'>('unassigned');
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
@@ -77,8 +78,11 @@ export default function AdminPage() {
         url += '&assigned=true&processed=false';
       } else if (statusFilter === 'processed') {
         url += '&assigned=true&processed=true';
+      } else if (statusFilter === 'archived') {
+        url += '&archived=true';
+      } else if (statusFilter === 'all') {
+        url += '&archived=all';
       }
-      // 'all' doesn't add any filters
 
       // Add search parameter if present
       if (eventFilter) {
@@ -302,6 +306,69 @@ export default function AdminPage() {
     }
   };
 
+  const archiveEvents = async () => {
+    if (selectedEventIds.size === 0) return;
+
+    try {
+      const response = await fetch('/api/admin/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventIds: Array.from(selectedEventIds) }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        alert(result.message);
+        await loadEvents();
+        setSelectedEventIds(new Set());
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error archiving events:', err);
+      alert('Failed to archive events');
+    }
+  };
+
+  const archiveEvent = async (eventId: number) => {
+    try {
+      const response = await fetch('/api/admin/archive', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventId }),
+      });
+
+      if (response.ok) {
+        await loadEvents();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error archiving event:', err);
+      alert('Failed to archive event');
+    }
+  };
+
+  const unarchiveEvent = async (eventId: number) => {
+    try {
+      const response = await fetch(`/api/admin/archive?eventId=${eventId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        await loadEvents();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error unarchiving event:', err);
+      alert('Failed to unarchive event');
+    }
+  };
+
   const getEventTypeColor = (type: string) => {
     switch (type) {
       case 'class_obtained':
@@ -353,6 +420,7 @@ export default function AdminPage() {
               <option value="unassigned">Unassigned (needs character assignment)</option>
               <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
               <option value="processed">Processed (live in database)</option>
+              <option value="archived">Archived (false positives)</option>
               <option value="all">All Events</option>
             </select>
           </div>
@@ -406,22 +474,32 @@ export default function AdminPage() {
 
             {/* Selection Controls */}
             {statusFilter === 'unassigned' && events.length > 0 && (
-              <div className="flex items-center justify-between mb-4 p-3 bg-indigo-50 border border-indigo-200 rounded">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedEventIds.size === events.length && events.length > 0}
-                    onChange={toggleSelectAll}
-                    className="w-4 h-4 text-indigo-600"
-                  />
-                  <span className="text-sm font-medium">
-                    Select All on Page
-                  </span>
-                </label>
+              <div className="mb-4 space-y-2">
+                <div className="flex items-center justify-between p-3 bg-indigo-50 border border-indigo-200 rounded">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={selectedEventIds.size === events.length && events.length > 0}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 text-indigo-600"
+                    />
+                    <span className="text-sm font-medium">
+                      Select All on Page
+                    </span>
+                  </label>
+                  {selectedEventIds.size > 0 && (
+                    <span className="text-sm font-semibold text-indigo-700">
+                      {selectedEventIds.size} event{selectedEventIds.size !== 1 ? 's' : ''} selected
+                    </span>
+                  )}
+                </div>
                 {selectedEventIds.size > 0 && (
-                  <span className="text-sm font-semibold text-indigo-700">
-                    {selectedEventIds.size} event{selectedEventIds.size !== 1 ? 's' : ''} selected
-                  </span>
+                  <button
+                    onClick={archiveEvents}
+                    className="w-full px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 text-sm font-medium"
+                  >
+                    Archive Selected ({selectedEventIds.size})
+                  </button>
                 )}
               </div>
             )}
@@ -532,6 +610,31 @@ export default function AdminPage() {
                       )}
                     </div>
                   )}
+
+                  {/* Action buttons */}
+                  <div className="mt-2 flex gap-2">
+                    {statusFilter === 'archived' ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          unarchiveEvent(event.id);
+                        }}
+                        className="text-xs px-2 py-1 bg-blue-600 text-white hover:bg-blue-700 rounded"
+                      >
+                        Unarchive
+                      </button>
+                    ) : statusFilter === 'unassigned' && !event.character_name ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          archiveEvent(event.id);
+                        }}
+                        className="text-xs px-2 py-1 bg-orange-600 text-white hover:bg-orange-700 rounded"
+                      >
+                        Archive
+                      </button>
+                    ) : null}
+                  </div>
 
                   {event.character_name && (
                     <div className="mt-2">

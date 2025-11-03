@@ -44,6 +44,8 @@ CREATE TABLE raw_events (
     parsed_data JSONB, -- Structured extraction: {class_name, level, skill_name, etc}
     character_id INTEGER REFERENCES characters(id), -- NULL until manually assigned
     is_assigned BOOLEAN DEFAULT FALSE,
+    is_processed BOOLEAN DEFAULT FALSE, -- TRUE when event has been processed into progression tables
+    archived BOOLEAN DEFAULT FALSE, -- TRUE for false positives that should be hidden
     context TEXT, -- Surrounding text for disambiguation
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
@@ -136,6 +138,8 @@ CREATE INDEX idx_raw_events_chapter ON raw_events(chapter_id);
 CREATE INDEX idx_raw_events_character ON raw_events(character_id);
 CREATE INDEX idx_raw_events_assigned ON raw_events(is_assigned) WHERE is_assigned = FALSE;
 CREATE INDEX idx_raw_events_type ON raw_events(event_type);
+CREATE INDEX idx_raw_events_archived ON raw_events(archived) WHERE archived = FALSE;
+CREATE INDEX idx_raw_events_processing_status ON raw_events(is_assigned, is_processed, archived);
 
 -- Character classes
 CREATE INDEX idx_character_classes_character ON character_classes(character_id);
@@ -172,7 +176,7 @@ SELECT
     c.title AS chapter_title
 FROM raw_events re
 JOIN chapters c ON re.chapter_id = c.id
-WHERE re.is_assigned = FALSE
+WHERE re.is_assigned = FALSE AND re.archived = FALSE
 ORDER BY c.chapter_number, re.id;
 
 -- View: Current character progression (latest state)
