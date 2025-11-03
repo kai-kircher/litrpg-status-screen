@@ -5,85 +5,120 @@ export async function POST(request: Request) {
   const client = await pool.connect();
 
   try {
-    const { eventId } = await request.json();
+    const { eventId, eventIds } = await request.json();
 
-    if (!eventId) {
+    // Support both single event and batch processing
+    const idsToProcess = eventIds ? eventIds : (eventId ? [eventId] : []);
+
+    if (idsToProcess.length === 0) {
       return NextResponse.json(
-        { error: 'eventId is required' },
+        { error: 'eventId or eventIds is required' },
         { status: 400 }
       );
     }
 
     await client.query('BEGIN');
 
-    // Get the raw event
+    // Get all events to process
     const eventResult = await client.query(
       `SELECT re.*, c.order_index, c.chapter_number, c.id as chapter_db_id
        FROM raw_events re
        JOIN chapters c ON re.chapter_id = c.id
-       WHERE re.id = $1`,
-      [eventId]
+       WHERE re.id = ANY($1)
+       ORDER BY c.order_index, re.id`,
+      [idsToProcess]
     );
 
     if (eventResult.rows.length === 0) {
       await client.query('ROLLBACK');
       return NextResponse.json(
-        { error: 'Event not found' },
+        { error: 'No events found' },
         { status: 404 }
       );
     }
 
-    const event = eventResult.rows[0];
+    const events = eventResult.rows;
+    const results = [];
+    const errors = [];
 
-    if (!event.is_assigned || !event.character_id) {
-      await client.query('ROLLBACK');
-      return NextResponse.json(
-        { error: 'Event must be assigned to a character first' },
-        { status: 400 }
-      );
-    }
+    // Process each event
+    for (const event of events) {
+      try {
+        if (!event.is_assigned || !event.character_id) {
+          errors.push({
+            eventId: event.id,
+            error: 'Event must be assigned to a character first',
+            rawText: event.raw_text
+          });
+          continue;
+        }
 
-    // Process based on event type
-    let result;
-    switch (event.event_type) {
-      case 'class_obtained':
-        result = await processClassObtained(client, event);
-        break;
-      case 'level_up':
-        result = await processLevelUp(client, event);
-        break;
-      case 'skill_obtained':
-        result = await processAbility(client, event, 'skill');
-        break;
-      case 'spell_obtained':
-        result = await processAbility(client, event, 'spell');
-        break;
-      default:
-        await client.query('ROLLBACK');
-        return NextResponse.json(
-          { error: `Unknown event type: ${event.event_type}` },
-          { status: 400 }
+        // Process based on event type
+        let result;
+        switch (event.event_type) {
+          case 'class_obtained':
+            result = await processClassObtained(client, event);
+            break;
+          case 'level_up':
+            result = await processLevelUp(client, event);
+            break;
+          case 'skill_obtained':
+            result = await processAbility(client, event, 'skill');
+            break;
+          case 'spell_obtained':
+            result = await processAbility(client, event, 'spell');
+            break;
+          default:
+            errors.push({
+              eventId: event.id,
+              error: `Unknown event type: ${event.event_type}`,
+              rawText: event.raw_text
+            });
+            continue;
+        }
+
+        // Mark event as processed
+        await client.query(
+          'UPDATE raw_events SET is_processed = true WHERE id = $1',
+          [event.id]
         );
-    }
 
-    // Mark event as processed
-    await client.query(
-      'UPDATE raw_events SET is_processed = true WHERE id = $1',
-      [eventId]
-    );
+        results.push({
+          eventId: event.id,
+          eventType: event.event_type,
+          rawText: event.raw_text,
+          data: result
+        });
+      } catch (error) {
+        errors.push({
+          eventId: event.id,
+          error: (error as Error).message,
+          rawText: event.raw_text
+        });
+      }
+    }
 
     await client.query('COMMIT');
 
+    const isBatch = eventIds && eventIds.length > 1;
+    const totalProcessed = results.length;
+    const totalErrors = errors.length;
+
     return NextResponse.json({
-      success: true,
-      message: `Processed ${event.event_type}`,
-      data: result,
+      success: totalProcessed > 0,
+      message: isBatch
+        ? `Processed ${totalProcessed} event(s)${totalErrors > 0 ? `, ${totalErrors} error(s)` : ''}`
+        : `Processed ${events[0]?.event_type || 'event'}`,
+      processed: totalProcessed,
+      failed: totalErrors,
+      results,
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
     await client.query('ROLLBACK');
     console.error('Error processing event:', error);
     return NextResponse.json(
-      { error: 'Failed to process event', details: (error as Error).message },
+      { error: 'Failed to process event(s)', details: (error as Error).message },
       { status: 500 }
     );
   } finally {
