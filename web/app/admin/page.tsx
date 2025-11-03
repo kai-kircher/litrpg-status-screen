@@ -262,6 +262,46 @@ export default function AdminPage() {
     }
   };
 
+  const processAllEvents = async () => {
+    // Get all event IDs that are ready to process (assigned but not processed)
+    const eventIdsToProcess = events
+      .filter(e => e.is_assigned && !e.is_processed)
+      .map(e => e.id);
+
+    if (eventIdsToProcess.length === 0) {
+      alert('No events to process');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to process ${eventIdsToProcess.length} event(s)?`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/process', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ eventIds: eventIdsToProcess }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        let message = `Success: ${result.message}`;
+        if (result.errors && result.errors.length > 0) {
+          message += '\n\nErrors:\n' + result.errors.map((e: any) => `- ${e.rawText}: ${e.error}`).join('\n');
+        }
+        alert(message);
+        await loadEvents();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}\n${error.details || ''}`);
+      }
+    } catch (err) {
+      console.error('Error processing events:', err);
+      alert('Failed to process events');
+    }
+  };
+
   const getEventTypeColor = (type: string) => {
     switch (type) {
       case 'class_obtained':
@@ -403,6 +443,28 @@ export default function AdminPage() {
                 Next
               </button>
             </div>
+
+            {/* Process All Button (only for ready_to_process status) */}
+            {statusFilter === 'ready_to_process' && events.length > 0 && (
+              <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-green-900">
+                      Batch Process
+                    </p>
+                    <p className="text-xs text-green-700 mt-0.5">
+                      Process all {events.filter(e => e.is_assigned && !e.is_processed).length} event(s) on this page
+                    </p>
+                  </div>
+                  <button
+                    onClick={processAllEvents}
+                    className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-medium"
+                  >
+                    Process All
+                  </button>
+                </div>
+              </div>
+            )}
 
             <div className="space-y-3 max-h-[600px] overflow-y-auto">
               {events.map((event) => (
