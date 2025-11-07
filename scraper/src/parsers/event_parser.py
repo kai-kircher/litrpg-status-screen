@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProgressionEvent:
     """Represents a single progression event found in text"""
-    event_type: str  # class_obtained, class_evolution, class_consolidation, level_up, skill_change, skill_obtained, spell_obtained
+    event_type: str  # class_obtained, class_evolution, class_consolidation, level_up, skill_change, skill_obtained, spell_obtained, condition, aspect, title, other
     raw_text: str  # Original bracketed text
     parsed_data: Dict[str, Any]  # Structured data
     context: str  # Surrounding text for disambiguation
@@ -61,6 +61,35 @@ class EventParser:
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned!?\]',
+        ],
+        'condition': [
+            # Matches: [Condition - Terrible Hunger Received.]
+            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Rr]eceived\.?\]',
+            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained\.?\]',
+            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained\.?\]',
+        ],
+        'aspect': [
+            # Matches: [Aspect - Body of the Eater Obtained.]
+            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained\.?\]',
+            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained\.?\]',
+            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Rr]eceived\.?\]',
+        ],
+        'title': [
+            # Matches: [Title - Hero Obtained!]
+            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
+            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
+            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
+        ],
+        'rank': [
+            # Matches: [Rank 1 Horror - Corpse Eater.]
+            # Matches: [Rank 5 General]
+            r'\[[Rr]ank\s+(\d+)\s+([^\]]+?)[-–—:]?\s*([^\]]*?)\.?\]',
+        ],
+        'other': [
+            # Catch-all for other bracketed progression events
+            # Matches things like [Reputation Increased] or other unknown formats
+            # This should be LAST to avoid false positives
+            r'\[([A-Z][^\]]{10,150}(?:[Oo]btained|[Gg]ained|[Rr]eceived|[Aa]cquired|[Ll]earned|[Ii]ncreased|[Dd]ecreased|[Uu]nlocked))\.?\]',
         ],
     }
 
@@ -255,6 +284,52 @@ class EventParser:
                     return None
                 parsed_data = {'spell_name': spell_name}
 
+            elif event_type == 'condition':
+                condition_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not condition_name:
+                    logger.debug(f"Empty condition name in: {raw_text}")
+                    return None
+                parsed_data = {'condition_name': condition_name}
+
+            elif event_type == 'aspect':
+                aspect_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not aspect_name:
+                    logger.debug(f"Empty aspect name in: {raw_text}")
+                    return None
+                parsed_data = {'aspect_name': aspect_name}
+
+            elif event_type == 'title':
+                title_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not title_name:
+                    logger.debug(f"Empty title name in: {raw_text}")
+                    return None
+                parsed_data = {'title_name': title_name}
+
+            elif event_type == 'rank':
+                if match.lastindex < 2:
+                    logger.debug(f"Insufficient groups in rank match: {raw_text}")
+                    return None
+                try:
+                    rank_number = int(match.group(1))
+                except (ValueError, IndexError) as e:
+                    logger.debug(f"Invalid rank number in: {raw_text} - {e}")
+                    return None
+                rank_type = match.group(2).strip()
+                rank_name = match.group(3).strip() if match.lastindex >= 3 else ''
+                if not rank_type:
+                    logger.debug(f"Empty rank type in: {raw_text}")
+                    return None
+                parsed_data = {
+                    'rank_number': rank_number,
+                    'rank_type': rank_type,
+                    'rank_name': rank_name
+                }
+
+            elif event_type == 'other':
+                # Catch-all for unrecognized progression events
+                content = match.group(1).strip() if match.lastindex >= 1 else raw_text
+                parsed_data = {'content': content}
+
             return ProgressionEvent(
                 event_type=event_type,
                 raw_text=raw_text,
@@ -393,6 +468,11 @@ class EventParser:
             'skill_change': 0,
             'skill_obtained': 0,
             'spell_obtained': 0,
+            'condition': 0,
+            'aspect': 0,
+            'title': 0,
+            'rank': 0,
+            'other': 0,
         }
 
         for event in events:
