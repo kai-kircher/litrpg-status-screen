@@ -133,7 +133,7 @@ export default function Home() {
             LitRPG Status Screen
           </h1>
           <p className="text-center text-indigo-200 mt-1 text-sm">
-            The Wandering Inn Character Progression Tracker
+            A Chapter-by-Chapter LitRPG Character Progression Tracker
           </p>
         </div>
       </div>
