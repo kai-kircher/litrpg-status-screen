@@ -38,18 +38,22 @@ export async function GET(request: Request) {
     const classResult = await pool.query(classQuery, classParams);
 
     // Get all unique abilities (skills, spells, conditions, aspects, titles, ranks, other)
-    // Bundle everything that's not a class into "skills"
+    // Bundle everything that's not a class into "skills" array, but preserve type information
     const abilityQuery = `
       WITH ability_acquisitions AS (
         SELECT DISTINCT
           a.id as ability_id,
           a.name,
-          a.type,
+          CASE
+            WHEN a.type = 'spell' THEN 'spell'
+            ELSE re.event_type
+          END as display_type,
           ca.chapter_id,
           c.order_index as acquired_at
         FROM character_abilities ca
         JOIN abilities a ON ca.ability_id = a.id
         JOIN chapters c ON ca.chapter_id = c.id
+        LEFT JOIN raw_events re ON ca.raw_event_id = re.id
         WHERE ca.character_id = $1
           ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
       ),
@@ -69,7 +73,7 @@ export async function GET(request: Request) {
           AND re.event_type IN ('skill_removed', 'skill_change', 'skill_consolidation', 'spell_removed')
           AND re.is_processed = true
       )
-      SELECT aa.name
+      SELECT aa.name, COALESCE(aa.display_type, 'skill_obtained') as type
       FROM ability_acquisitions aa
       LEFT JOIN ability_removals ar
         ON LOWER(TRIM(aa.name)) = ar.ability_name
@@ -83,7 +87,7 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       classes: classResult.rows,
-      skills: abilityResult.rows.map(r => r.name),
+      skills: abilityResult.rows.map(r => ({ name: r.name, type: r.type })),
       spells: [], // Keep for backwards compatibility but empty
     });
   } catch (error) {

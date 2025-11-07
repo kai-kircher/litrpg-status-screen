@@ -13,17 +13,22 @@ type Chapter = {
   chapter_number: string;
 };
 
+type Ability = {
+  name: string;
+  type: string;
+};
+
 type ProgressionEvent = {
   order_index: number;
   chapter_number: string;
   classes: { name: string; level: number | null }[];
-  skills: string[];
+  skills: Ability[];
   spells: string[];
 };
 
 type CharacterSummary = {
   classes: { class_name: string; level: number | null; chapter_number: string }[];
-  skills: string[];
+  skills: Ability[];
   spells: string[];
 };
 
@@ -119,9 +124,32 @@ export default function Home() {
     return (
       event.chapter_number.toLowerCase().includes(searchLower) ||
       event.classes.some((c) => c.name.toLowerCase().includes(searchLower)) ||
-      event.skills.some((s) => s.toLowerCase().includes(searchLower))
+      event.skills.some((s) => s.name.toLowerCase().includes(searchLower))
     );
   });
+
+  // Helper function to get badge styling and label based on ability type
+  const getAbilityBadge = (type: string) => {
+    switch (type) {
+      case 'spell':
+      case 'spell_obtained':
+        return { label: 'SPELL', bgColor: 'bg-blue-900/20', borderColor: 'border-blue-800/40', badgeColor: 'bg-blue-700' };
+      case 'condition':
+        return { label: 'CONDITION', bgColor: 'bg-orange-900/20', borderColor: 'border-orange-800/40', badgeColor: 'bg-orange-700' };
+      case 'aspect':
+        return { label: 'ASPECT', bgColor: 'bg-pink-900/20', borderColor: 'border-pink-800/40', badgeColor: 'bg-pink-700' };
+      case 'title':
+        return { label: 'TITLE', bgColor: 'bg-indigo-900/20', borderColor: 'border-indigo-800/40', badgeColor: 'bg-indigo-700' };
+      case 'rank':
+        return { label: 'RANK', bgColor: 'bg-cyan-900/20', borderColor: 'border-cyan-800/40', badgeColor: 'bg-cyan-700' };
+      case 'other':
+        return { label: 'OTHER', bgColor: 'bg-slate-900/20', borderColor: 'border-slate-800/40', badgeColor: 'bg-slate-700' };
+      case 'skill_obtained':
+      case 'skill_change':
+      default:
+        return { label: 'SKILL', bgColor: 'bg-green-900/20', borderColor: 'border-green-800/40', badgeColor: 'bg-green-700' };
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-900 text-white">
@@ -331,17 +359,20 @@ export default function Home() {
                     </div>
                   ))}
 
-                  {event.skills.map((skill, skillIdx) => (
-                    <div
-                      key={skillIdx}
-                      className="flex items-center gap-2 bg-green-900/20 border border-green-800/40 rounded px-3 py-2"
-                    >
-                      <span className="inline-flex items-center gap-1 bg-green-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
-                        SKILL
-                      </span>
-                      <span className="text-white">{skill}</span>
-                    </div>
-                  ))}
+                  {event.skills.map((skill, skillIdx) => {
+                    const badge = getAbilityBadge(skill.type);
+                    return (
+                      <div
+                        key={skillIdx}
+                        className={`flex items-center gap-2 ${badge.bgColor} border ${badge.borderColor} rounded px-3 py-2`}
+                      >
+                        <span className={`inline-flex items-center gap-1 ${badge.badgeColor} text-white text-xs font-semibold px-2 py-0.5 rounded`}>
+                          {badge.label}
+                        </span>
+                        <span className="text-white">{skill.name}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -379,17 +410,20 @@ export default function Home() {
               <div className="mb-6">
                 <h3 className="text-2xl font-bold mb-4 text-indigo-300">Skills</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {summary.skills.map((skill, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-2 bg-green-900/20 border border-green-800/40 rounded px-3 py-2"
-                    >
-                      <span className="inline-flex items-center gap-1 bg-green-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
-                        SKILL
-                      </span>
-                      <span className="text-white">{skill}</span>
-                    </div>
-                  ))}
+                  {summary.skills.map((skill, idx) => {
+                    const badge = getAbilityBadge(skill.type);
+                    return (
+                      <div
+                        key={idx}
+                        className={`flex items-center gap-2 ${badge.bgColor} border ${badge.borderColor} rounded px-3 py-2`}
+                      >
+                        <span className={`inline-flex items-center gap-1 ${badge.badgeColor} text-white text-xs font-semibold px-2 py-0.5 rounded`}>
+                          {badge.label}
+                        </span>
+                        <span className="text-white">{skill.name}</span>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}

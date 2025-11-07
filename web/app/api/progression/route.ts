@@ -49,17 +49,21 @@ export async function GET(request: Request) {
         UNION ALL
 
         -- Get abilities (skills, spells, conditions, aspects, titles, ranks, other)
-        -- All stored as abilities, will be displayed as "skills"
+        -- Preserve type information for display
         SELECT
           ch.order_index,
           ch.chapter_number,
-          'skill' as event_type,
+          CASE
+            WHEN a.type = 'spell' THEN 'spell'
+            ELSE COALESCE(re.event_type, 'skill_obtained')
+          END as event_type,
           a.name,
           NULL as level,
           ca.character_class_id as class_id
         FROM character_abilities ca
         JOIN abilities a ON ca.ability_id = a.id
         JOIN chapters ch ON ca.chapter_id = ch.id
+        LEFT JOIN raw_events re ON ca.raw_event_id = re.id
         WHERE ca.character_id = $1
           ${maxOrderIndex ? 'AND ch.order_index <= $2' : ''}
       )
@@ -109,9 +113,13 @@ export async function GET(request: Request) {
             level: event.level
           });
         }
-      } else if (event.event_type === 'skill') {
-        // All abilities (skills, spells, conditions, etc.) are now grouped as "skills"
-        progressionByChapter[key].skills.push(event.name);
+      } else {
+        // All abilities (skills, spells, conditions, aspects, titles, ranks, other)
+        // are grouped in "skills" array with type information
+        progressionByChapter[key].skills.push({
+          name: event.name,
+          type: event.event_type
+        });
       }
     }
 
