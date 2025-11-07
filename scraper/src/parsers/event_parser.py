@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProgressionEvent:
     """Represents a single progression event found in text"""
-    event_type: str  # class_obtained, class_evolution, class_consolidation, level_up, skill_obtained, spell_obtained
+    event_type: str  # class_obtained, class_evolution, class_consolidation, level_up, skill_change, skill_obtained, spell_obtained
     raw_text: str  # Original bracketed text
     parsed_data: Dict[str, Any]  # Structured data
     context: str  # Surrounding text for disambiguation
@@ -45,6 +45,10 @@ class EventParser:
         'level_up': [
             r'\[([^\]]+?)\s+[Ll]evel\s+(\d+)!?\]',
             r'\[([^\]]+?)\s+[Ll]v\.?\s+(\d+)!?\]',
+        ],
+        'skill_change': [
+            # Matches: [Skill Change - Royal Slap → Ghost's Hand!]
+            r'\[[Ss]kill\s+[Cc]hange\s*[-–—:]\s*([^\]]+?)\s*[→>-]+\s*([^\]]+?)!?\]',
         ],
         'skill_obtained': [
             r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
@@ -223,6 +227,20 @@ class EventParser:
                     'level': level
                 }
 
+            elif event_type == 'skill_change':
+                if match.lastindex < 2:
+                    logger.debug(f"Insufficient groups in skill_change match: {raw_text}")
+                    return None
+                old_skill = match.group(1).strip()
+                new_skill = match.group(2).strip()
+                if not old_skill or not new_skill:
+                    logger.debug(f"Empty skill name in skill change: {raw_text}")
+                    return None
+                parsed_data = {
+                    'old_skill': old_skill,
+                    'new_skill': new_skill
+                }
+
             elif event_type == 'skill_obtained':
                 skill_name = match.group(1).strip() if match.lastindex >= 1 else ''
                 if not skill_name:
@@ -372,6 +390,7 @@ class EventParser:
             'class_evolution': 0,
             'class_consolidation': 0,
             'level_up': 0,
+            'skill_change': 0,
             'skill_obtained': 0,
             'spell_obtained': 0,
         }

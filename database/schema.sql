@@ -39,7 +39,7 @@ CREATE TABLE characters (
 CREATE TABLE raw_events (
     id SERIAL PRIMARY KEY,
     chapter_id INTEGER NOT NULL REFERENCES chapters(id) ON DELETE CASCADE,
-    event_type VARCHAR(50) NOT NULL, -- 'class_obtained', 'level_up', 'skill_obtained', 'spell_obtained'
+    event_type VARCHAR(50) NOT NULL, -- 'class_obtained', 'class_evolution', 'class_consolidation', 'level_up', 'skill_change', 'skill_obtained', 'spell_obtained'
     raw_text TEXT NOT NULL, -- The original bracketed text
     parsed_data JSONB, -- Structured extraction: {class_name, level, skill_name, etc}
     character_id INTEGER REFERENCES characters(id), -- NULL until manually assigned
@@ -50,7 +50,15 @@ CREATE TABLE raw_events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
     CONSTRAINT raw_events_event_type_check CHECK (
-        event_type IN ('class_obtained', 'level_up', 'skill_obtained', 'spell_obtained')
+        event_type IN (
+            'class_obtained',
+            'class_evolution',
+            'class_consolidation',
+            'level_up',
+            'skill_change',
+            'skill_obtained',
+            'spell_obtained'
+        )
     )
 );
 
