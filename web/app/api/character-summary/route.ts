@@ -62,8 +62,12 @@ export async function GET(request: Request) {
           COALESCE(
             LOWER(TRIM(re.parsed_data->>'skill_name')),
             LOWER(TRIM(re.parsed_data->>'spell_name')),
+            LOWER(TRIM(re.parsed_data->>'condition_name')),
+            LOWER(TRIM(re.parsed_data->>'aspect_name')),
+            LOWER(TRIM(re.parsed_data->>'title_name')),
             LOWER(TRIM(re.parsed_data->>'name')),
-            LOWER(TRIM(re.parsed_data->>'ability_name'))
+            LOWER(TRIM(re.parsed_data->>'ability_name')),
+            LOWER(TRIM(re.parsed_data->>'content'))
           ) as ability_name,
           c.order_index as removed_at
         FROM raw_events re

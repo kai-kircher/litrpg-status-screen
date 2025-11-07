@@ -61,10 +61,10 @@ class EventParser:
             r'\[[Ss]kill\s+[Cc]onsolidation:\s*([^\]]+?)\s+[Rr]emoved!?\]',
         ],
         'skill_obtained': [
-            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
-            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
-            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
-            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned!?\]',
+            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained[!.]?\]',
+            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained[!.]?\]',
+            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired[!.]?\]',
+            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned[!.]?\]',
         ],
         'skill_removed': [
             # Matches: [Skill - Aroma of Spring Lost.]
@@ -72,10 +72,10 @@ class EventParser:
             r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Rr]emoved!?\]',
         ],
         'spell_obtained': [
-            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
-            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
-            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
-            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned!?\]',
+            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained[!.]?\]',
+            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained[!.]?\]',
+            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired[!.]?\]',
+            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned[!.]?\]',
         ],
         'spell_removed': [
             # Matches: [Spell - Fireball Lost.]
@@ -84,21 +84,21 @@ class EventParser:
         ],
         'condition': [
             # Matches: [Condition - Terrible Hunger Received.]
-            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Rr]eceived\.?\]',
-            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained\.?\]',
-            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained\.?\]',
+            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Rr]eceived[!.]?\]',
+            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained[!.]?\]',
+            r'\[[Cc]ondition\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained[!.]?\]',
         ],
         'aspect': [
             # Matches: [Aspect - Body of the Eater Obtained.]
-            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained\.?\]',
-            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained\.?\]',
-            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Rr]eceived\.?\]',
+            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained[!.]?\]',
+            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained[!.]?\]',
+            r'\[[Aa]spect\s*[-–—:]\s*([^\]]+?)\s+[Rr]eceived[!.]?\]',
         ],
         'title': [
             # Matches: [Title - Hero Obtained!]
-            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
-            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
-            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
+            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained[!.]?\]',
+            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained[!.]?\]',
+            r'\[[Tt]itle\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired[!.]?\]',
         ],
         'rank': [
             # Matches: [Rank 1 Horror - Corpse Eater.]

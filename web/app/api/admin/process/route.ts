@@ -475,14 +475,29 @@ async function processOtherEvent(client: any, event: any) {
   // For condition, aspect, title, rank, and other event types
   // Store them as 'skill' type abilities so they appear in the UI
 
-  // Extract the name from parsed_data or raw_text
-  let abilityName = event.parsed_data?.name || event.parsed_data?.ability_name;
+  // Extract the name from parsed_data based on event type
+  let abilityName = event.parsed_data?.name ||
+                    event.parsed_data?.ability_name ||
+                    event.parsed_data?.condition_name ||
+                    event.parsed_data?.aspect_name ||
+                    event.parsed_data?.title_name ||
+                    event.parsed_data?.content;
+
+  // For rank events, construct a name
+  if (!abilityName && event.event_type === 'rank') {
+    const rankNum = event.parsed_data?.rank_number;
+    const rankType = event.parsed_data?.rank_type;
+    const rankName = event.parsed_data?.rank_name;
+    if (rankNum && rankType) {
+      abilityName = `Rank ${rankNum} ${rankType}${rankName ? ' - ' + rankName : ''}`;
+    }
+  }
 
   if (!abilityName) {
     // Try to extract from raw text - remove brackets and common prefixes
     const rawText = event.raw_text.replace(/[\[\]]/g, '').trim();
     // Remove common suffixes like "obtained!", "gained!", etc.
-    abilityName = rawText.replace(/\s+(obtained|gained|lost|removed)!?$/i, '').trim();
+    abilityName = rawText.replace(/\s+(obtained|gained|received|lost|removed)[!.]?$/i, '').trim();
   }
 
   if (!abilityName) {
