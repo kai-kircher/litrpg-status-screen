@@ -473,12 +473,76 @@ async function processAbilityRemoved(client: any, event: any, type: 'skill' | 's
 
 async function processOtherEvent(client: any, event: any) {
   // For condition, aspect, title, rank, and other event types
-  // These are tracked in raw_events but don't create entries in the progression tables
-  // Just mark them as processed for record-keeping
+  // Store them as 'skill' type abilities so they appear in the UI
+
+  // Extract the name from parsed_data or raw_text
+  let abilityName = event.parsed_data?.name || event.parsed_data?.ability_name;
+
+  if (!abilityName) {
+    // Try to extract from raw text - remove brackets and common prefixes
+    const rawText = event.raw_text.replace(/[\[\]]/g, '').trim();
+    // Remove common suffixes like "obtained!", "gained!", etc.
+    abilityName = rawText.replace(/\s+(obtained|gained|lost|removed)!?$/i, '').trim();
+  }
+
+  if (!abilityName) {
+    throw new Error(`Could not extract name from ${event.event_type} event`);
+  }
+
+  const normalizedName = abilityName.toLowerCase().trim();
+
+  // Insert or get the ability - store as 'skill' type so it appears with skills
+  const abilityResult = await client.query(
+    `INSERT INTO abilities (name, type, normalized_name, first_seen_chapter_id)
+     VALUES ($1, 'skill', $2, $3)
+     ON CONFLICT (normalized_name, type) DO UPDATE
+     SET name = EXCLUDED.name
+     RETURNING id`,
+    [abilityName, normalizedName, event.chapter_id]
+  );
+
+  const abilityId = abilityResult.rows[0].id;
+
+  // Find the most recent active class for this character (if any)
+  const classResult = await client.query(
+    `SELECT id FROM character_classes
+     WHERE character_id = $1 AND is_active = true
+     ORDER BY chapter_id DESC
+     LIMIT 1`,
+    [event.character_id]
+  );
+
+  const characterClassId = classResult.rows.length > 0 ? classResult.rows[0].id : null;
+
+  // Get the current level if we have a class
+  let levelAtAcquisition = null;
+  if (characterClassId) {
+    const levelResult = await client.query(
+      `SELECT level FROM character_levels
+       WHERE character_class_id = $1 AND chapter_id <= $2
+       ORDER BY chapter_id DESC, level DESC
+       LIMIT 1`,
+      [characterClassId, event.chapter_id]
+    );
+    if (levelResult.rows.length > 0) {
+      levelAtAcquisition = levelResult.rows[0].level;
+    }
+  }
+
+  // Insert character ability
+  const characterAbilityResult = await client.query(
+    `INSERT INTO character_abilities
+     (character_id, ability_id, chapter_id, character_class_id, level_at_acquisition, raw_event_id, acquisition_method)
+     VALUES ($1, $2, $3, $4, $5, $6, 'level_up')
+     ON CONFLICT (character_id, ability_id, chapter_id) DO UPDATE
+     SET raw_event_id = $6, character_class_id = $4, level_at_acquisition = $5
+     RETURNING *`,
+    [event.character_id, abilityId, event.chapter_id, characterClassId, levelAtAcquisition, event.id]
+  );
 
   return {
     event_type: event.event_type,
-    raw_text: event.raw_text,
-    note: 'Event processed but not added to progression tables (condition/aspect/title/rank/other)'
+    ability: { id: abilityId, name: abilityName, type: 'skill' },
+    character_ability: characterAbilityResult.rows[0]
   };
 }

@@ -119,8 +119,7 @@ export default function Home() {
     return (
       event.chapter_number.toLowerCase().includes(searchLower) ||
       event.classes.some((c) => c.name.toLowerCase().includes(searchLower)) ||
-      event.skills.some((s) => s.toLowerCase().includes(searchLower)) ||
-      event.spells.some((s) => s.toLowerCase().includes(searchLower))
+      event.skills.some((s) => s.toLowerCase().includes(searchLower))
     );
   });
 
@@ -241,7 +240,7 @@ export default function Home() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="Filter by chapter, class, skill, or spell..."
+                placeholder="Filter by chapter, class, or skill..."
                 className="w-full bg-gray-900 border border-gray-600 rounded px-4 py-2 pl-10 text-white placeholder-gray-400 hover:border-indigo-500 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors"
                 value={filter}
                 onChange={(e) => setFilter(e.target.value)}
@@ -343,18 +342,6 @@ export default function Home() {
                       <span className="text-white">{skill}</span>
                     </div>
                   ))}
-
-                  {event.spells.map((spell, spellIdx) => (
-                    <div
-                      key={spellIdx}
-                      className="flex items-center gap-2 bg-blue-900/20 border border-blue-800/40 rounded px-3 py-2"
-                    >
-                      <span className="inline-flex items-center gap-1 bg-blue-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
-                        SPELL
-                      </span>
-                      <span className="text-white">{spell}</span>
-                    </div>
-                  ))}
                 </div>
               </div>
             ))}
@@ -407,28 +394,8 @@ export default function Home() {
               </div>
             )}
 
-            {/* Spells Section */}
-            {summary.spells.length > 0 && (
-              <div>
-                <h3 className="text-2xl font-bold mb-4 text-indigo-300">Spells</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                  {summary.spells.map((spell, idx) => (
-                    <div
-                      key={idx}
-                      className="flex items-center gap-2 bg-blue-900/20 border border-blue-800/40 rounded px-3 py-2"
-                    >
-                      <span className="inline-flex items-center gap-1 bg-blue-700 text-white text-xs font-semibold px-2 py-0.5 rounded">
-                        SPELL
-                      </span>
-                      <span className="text-white">{spell}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             {/* Empty state */}
-            {summary.classes.length === 0 && summary.skills.length === 0 && summary.spells.length === 0 && (
+            {summary.classes.length === 0 && summary.skills.length === 0 && (
               <div className="text-center py-8">
                 <p className="text-gray-400">No progression data found</p>
                 <p className="text-gray-500 text-sm mt-1">Try selecting a different character or chapter range</p>

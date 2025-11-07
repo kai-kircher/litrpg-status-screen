@@ -48,11 +48,12 @@ export async function GET(request: Request) {
 
         UNION ALL
 
-        -- Get abilities (skills and spells)
+        -- Get abilities (skills, spells, conditions, aspects, titles, ranks, other)
+        -- All stored as abilities, will be displayed as "skills"
         SELECT
           ch.order_index,
           ch.chapter_number,
-          a.type as event_type,
+          'skill' as event_type,
           a.name,
           NULL as level,
           ca.character_class_id as class_id
@@ -109,9 +110,8 @@ export async function GET(request: Request) {
           });
         }
       } else if (event.event_type === 'skill') {
+        // All abilities (skills, spells, conditions, etc.) are now grouped as "skills"
         progressionByChapter[key].skills.push(event.name);
-      } else if (event.event_type === 'spell') {
-        progressionByChapter[key].spells.push(event.name);
       }
     }
 

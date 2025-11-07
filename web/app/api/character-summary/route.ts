@@ -37,12 +37,14 @@ export async function GET(request: Request) {
     const classParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
     const classResult = await pool.query(classQuery, classParams);
 
-    // Get all unique skills, excluding those that were removed/changed/consolidated
-    const skillQuery = `
-      WITH skill_acquisitions AS (
+    // Get all unique abilities (skills, spells, conditions, aspects, titles, ranks, other)
+    // Bundle everything that's not a class into "skills"
+    const abilityQuery = `
+      WITH ability_acquisitions AS (
         SELECT DISTINCT
           a.id as ability_id,
           a.name,
+          a.type,
           ca.chapter_id,
           c.order_index as acquired_at
         FROM character_abilities ca
@@ -50,73 +52,39 @@ export async function GET(request: Request) {
         JOIN chapters c ON ca.chapter_id = c.id
         WHERE ca.character_id = $1
           ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
-          AND a.type = 'skill'
       ),
-      skill_removals AS (
+      ability_removals AS (
         SELECT DISTINCT
-          LOWER(TRIM(re.parsed_data->>'skill_name')) as skill_name,
+          COALESCE(
+            LOWER(TRIM(re.parsed_data->>'skill_name')),
+            LOWER(TRIM(re.parsed_data->>'spell_name')),
+            LOWER(TRIM(re.parsed_data->>'name')),
+            LOWER(TRIM(re.parsed_data->>'ability_name'))
+          ) as ability_name,
           c.order_index as removed_at
         FROM raw_events re
         JOIN chapters c ON re.chapter_id = c.id
         WHERE re.character_id = $1
           ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
-          AND re.event_type IN ('skill_removed', 'skill_change', 'skill_consolidation')
+          AND re.event_type IN ('skill_removed', 'skill_change', 'skill_consolidation', 'spell_removed')
           AND re.is_processed = true
       )
-      SELECT sa.name
-      FROM skill_acquisitions sa
-      LEFT JOIN skill_removals sr
-        ON LOWER(TRIM(sa.name)) = sr.skill_name
-        AND sr.removed_at >= sa.acquired_at
-      WHERE sr.skill_name IS NULL
-      ORDER BY sa.name ASC
+      SELECT aa.name
+      FROM ability_acquisitions aa
+      LEFT JOIN ability_removals ar
+        ON LOWER(TRIM(aa.name)) = ar.ability_name
+        AND ar.removed_at >= aa.acquired_at
+      WHERE ar.ability_name IS NULL
+      ORDER BY aa.name ASC
     `;
 
-    const skillParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
-    const skillResult = await pool.query(skillQuery, skillParams);
-
-    // Get all unique spells, excluding those that were removed
-    const spellQuery = `
-      WITH spell_acquisitions AS (
-        SELECT DISTINCT
-          a.id as ability_id,
-          a.name,
-          ca.chapter_id,
-          c.order_index as acquired_at
-        FROM character_abilities ca
-        JOIN abilities a ON ca.ability_id = a.id
-        JOIN chapters c ON ca.chapter_id = c.id
-        WHERE ca.character_id = $1
-          ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
-          AND a.type = 'spell'
-      ),
-      spell_removals AS (
-        SELECT DISTINCT
-          LOWER(TRIM(re.parsed_data->>'spell_name')) as spell_name,
-          c.order_index as removed_at
-        FROM raw_events re
-        JOIN chapters c ON re.chapter_id = c.id
-        WHERE re.character_id = $1
-          ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
-          AND re.event_type = 'spell_removed'
-          AND re.is_processed = true
-      )
-      SELECT sa.name
-      FROM spell_acquisitions sa
-      LEFT JOIN spell_removals sr
-        ON LOWER(TRIM(sa.name)) = sr.spell_name
-        AND sr.removed_at >= sa.acquired_at
-      WHERE sr.spell_name IS NULL
-      ORDER BY sa.name ASC
-    `;
-
-    const spellParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
-    const spellResult = await pool.query(spellQuery, spellParams);
+    const abilityParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
+    const abilityResult = await pool.query(abilityQuery, abilityParams);
 
     return NextResponse.json({
       classes: classResult.rows,
-      skills: skillResult.rows.map(r => r.name),
-      spells: spellResult.rows.map(r => r.name),
+      skills: abilityResult.rows.map(r => r.name),
+      spells: [], // Keep for backwards compatibility but empty
     });
   } catch (error) {
     console.error('Error fetching character summary:', error);
