@@ -31,6 +31,8 @@ class EventParser:
             r'\[([^\]]+?)\s+[Cc]lass\s+[Aa]cquired!?\]',
         ],
         'class_evolution': [
+            # Matches: [Conditions Met: Warrior → Weapon Expert!]
+            r'\[[Cc]onditions\s+[Mm]et:\s*([^\]]+?)\s*[→>-]+\s*([^\]]+?)!?\]',
             # Matches: [Warrior → Weapon Expert Class!]
             # Also matches: [Class A -> Class B Class!]
             r'\[([^\]]+?)\s*[→>-]+\s*([^\]]+?)\s+[Cc]lass!?\]',
