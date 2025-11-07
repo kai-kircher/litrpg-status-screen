@@ -34,7 +34,7 @@ export default function Home() {
   const [maxChapter, setMaxChapter] = useState<number | null>(null);
   const [progression, setProgression] = useState<ProgressionEvent[]>([]);
   const [summary, setSummary] = useState<CharacterSummary | null>(null);
-  const [viewMode, setViewMode] = useState<'timeline' | 'summary'>('timeline');
+  const [viewMode, setViewMode] = useState<'timeline' | 'summary'>('summary');
   const [filter, setFilter] = useState('');
   const [loading, setLoading] = useState(false);
 

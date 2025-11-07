@@ -59,19 +59,40 @@ export async function POST(request: Request) {
           case 'class_obtained':
             result = await processClassObtained(client, event);
             break;
+          case 'class_evolution':
+            result = await processClassEvolution(client, event);
+            break;
+          case 'class_consolidation':
+            result = await processClassConsolidation(client, event);
+            break;
+          case 'class_removed':
+            result = await processClassRemoved(client, event);
+            break;
           case 'level_up':
             result = await processLevelUp(client, event);
             break;
           case 'skill_obtained':
             result = await processAbility(client, event, 'skill');
             break;
+          case 'skill_change':
+            result = await processSkillChange(client, event);
+            break;
+          case 'skill_consolidation':
+            result = await processSkillConsolidation(client, event);
+            break;
+          case 'skill_removed':
+            result = await processAbilityRemoved(client, event, 'skill');
+            break;
           case 'spell_obtained':
             result = await processAbility(client, event, 'spell');
+            break;
+          case 'spell_removed':
+            result = await processAbilityRemoved(client, event, 'spell');
             break;
           default:
             errors.push({
               eventId: event.id,
-              error: `Unknown event type: ${event.event_type}`,
+              error: `Unsupported event type for processing: ${event.event_type}`,
               rawText: event.raw_text
             });
             continue;
@@ -277,4 +298,168 @@ function extractAbilityName(rawText: string): string | null {
   // Pattern: [Skill - Ability Name obtained!] or [Spell - Ability Name obtained!]
   const abilityMatch = rawText.match(/\[(?:Skill|Spell)\s*[-–—:]\s*([^\]]+?)\s+obtained/i);
   return abilityMatch ? abilityMatch[1].trim() : null;
+}
+
+async function processClassEvolution(client: any, event: any) {
+  const oldClass = event.parsed_data?.old_class;
+  const newClass = event.parsed_data?.new_class;
+
+  if (!oldClass || !newClass) {
+    throw new Error('Could not extract old and new class names from event');
+  }
+
+  // Mark old class as inactive
+  await client.query(
+    `UPDATE character_classes
+     SET is_active = false
+     WHERE character_id = $1 AND class_name = $2`,
+    [event.character_id, oldClass]
+  );
+
+  // Create new class and link evolution
+  const oldClassResult = await client.query(
+    `SELECT id FROM character_classes
+     WHERE character_id = $1 AND class_name = $2
+     ORDER BY chapter_id DESC LIMIT 1`,
+    [event.character_id, oldClass]
+  );
+
+  const evolvedFromId = oldClassResult.rows.length > 0 ? oldClassResult.rows[0].id : null;
+
+  const result = await client.query(
+    `INSERT INTO character_classes
+     (character_id, class_name, chapter_id, raw_event_id, is_active, evolved_from_class_id)
+     VALUES ($1, $2, $3, $4, true, $5)
+     ON CONFLICT (character_id, class_name, chapter_id) DO UPDATE
+     SET raw_event_id = $4, is_active = true, evolved_from_class_id = $5
+     RETURNING *`,
+    [event.character_id, newClass, event.chapter_id, event.id, evolvedFromId]
+  );
+
+  return { old_class: oldClass, new_class: newClass, character_class: result.rows[0] };
+}
+
+async function processClassConsolidation(client: any, event: any) {
+  const oldClasses = event.parsed_data?.old_classes || [];
+
+  if (oldClasses.length === 0) {
+    throw new Error('Could not extract old class names from consolidation event');
+  }
+
+  // Mark all old classes as inactive and get their IDs
+  const consolidatedIds = [];
+  for (const oldClass of oldClasses) {
+    const updateResult = await client.query(
+      `UPDATE character_classes
+       SET is_active = false
+       WHERE character_id = $1 AND class_name = $2
+       RETURNING id`,
+      [event.character_id, oldClass]
+    );
+    if (updateResult.rows.length > 0) {
+      consolidatedIds.push(updateResult.rows[0].id);
+    }
+  }
+
+  // Note: The consolidated class should be added with a separate class_obtained event
+  // This event just marks the old classes as inactive
+
+  return { consolidated_classes: oldClasses, consolidated_ids: consolidatedIds };
+}
+
+async function processClassRemoved(client: any, event: any) {
+  const className = event.parsed_data?.class_name;
+
+  if (!className) {
+    throw new Error('Could not extract class name from removal event');
+  }
+
+  // Mark class as inactive
+  await client.query(
+    `UPDATE character_classes
+     SET is_active = false
+     WHERE character_id = $1 AND class_name = $2`,
+    [event.character_id, className]
+  );
+
+  return { removed_class: className };
+}
+
+async function processSkillChange(client: any, event: any) {
+  const oldSkill = event.parsed_data?.old_skill;
+  const newSkill = event.parsed_data?.new_skill;
+
+  if (!oldSkill || !newSkill) {
+    throw new Error('Could not extract old and new skill names from event');
+  }
+
+  // Remove old skill (mark as removed in a tracking table or delete)
+  // For now, we'll just add the new skill - the summary query will handle deduplication
+
+  // Add new skill
+  const normalizedName = newSkill.toLowerCase().trim();
+  const abilityResult = await client.query(
+    `INSERT INTO abilities (name, type, normalized_name, first_seen_chapter_id)
+     VALUES ($1, 'skill', $2, $3)
+     ON CONFLICT (normalized_name, type) DO UPDATE
+     SET name = EXCLUDED.name
+     RETURNING id`,
+    [newSkill, normalizedName, event.chapter_id]
+  );
+
+  const abilityId = abilityResult.rows[0].id;
+
+  // Find the most recent active class
+  const classResult = await client.query(
+    `SELECT id FROM character_classes
+     WHERE character_id = $1 AND is_active = true
+     ORDER BY chapter_id DESC LIMIT 1`,
+    [event.character_id]
+  );
+
+  const characterClassId = classResult.rows.length > 0 ? classResult.rows[0].id : null;
+
+  // Insert character ability
+  const characterAbilityResult = await client.query(
+    `INSERT INTO character_abilities
+     (character_id, ability_id, chapter_id, character_class_id, raw_event_id, acquisition_method)
+     VALUES ($1, $2, $3, $4, $5, 'evolved')
+     ON CONFLICT (character_id, ability_id, chapter_id) DO UPDATE
+     SET raw_event_id = $5, character_class_id = $4
+     RETURNING *`,
+    [event.character_id, abilityId, event.chapter_id, characterClassId, event.id]
+  );
+
+  return {
+    old_skill: oldSkill,
+    new_skill: newSkill,
+    character_ability: characterAbilityResult.rows[0]
+  };
+}
+
+async function processSkillConsolidation(client: any, event: any) {
+  const skillName = event.parsed_data?.skill_name;
+
+  if (!skillName) {
+    throw new Error('Could not extract skill name from consolidation event');
+  }
+
+  // Note: This event represents an old skill being removed during consolidation
+  // The new consolidated skill should be added with a separate skill_obtained event
+  // We'll store this for tracking but the summary query will handle filtering
+
+  return { consolidated_skill: skillName };
+}
+
+async function processAbilityRemoved(client: any, event: any, type: 'skill' | 'spell') {
+  const abilityName = event.parsed_data?.skill_name || event.parsed_data?.spell_name;
+
+  if (!abilityName) {
+    throw new Error(`Could not extract ${type} name from removal event`);
+  }
+
+  // Note: We track the removal event but don't delete from character_abilities
+  // The summary query will filter based on whether a removal event exists after the acquisition
+
+  return { removed_ability: abilityName, type };
 }

@@ -37,31 +37,77 @@ export async function GET(request: Request) {
     const classParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
     const classResult = await pool.query(classQuery, classParams);
 
-    // Get all unique skills
+    // Get all unique skills, excluding those that were removed/changed/consolidated
     const skillQuery = `
-      SELECT DISTINCT a.name, a.type
-      FROM character_abilities ca
-      JOIN abilities a ON ca.ability_id = a.id
-      JOIN chapters c ON ca.chapter_id = c.id
-      WHERE ca.character_id = $1
-        ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
-        AND a.type = 'skill'
-      ORDER BY a.name ASC
+      WITH skill_acquisitions AS (
+        SELECT DISTINCT
+          a.id as ability_id,
+          a.name,
+          ca.chapter_id,
+          c.order_index as acquired_at
+        FROM character_abilities ca
+        JOIN abilities a ON ca.ability_id = a.id
+        JOIN chapters c ON ca.chapter_id = c.id
+        WHERE ca.character_id = $1
+          ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
+          AND a.type = 'skill'
+      ),
+      skill_removals AS (
+        SELECT DISTINCT
+          LOWER(TRIM(re.parsed_data->>'skill_name')) as skill_name,
+          c.order_index as removed_at
+        FROM raw_events re
+        JOIN chapters c ON re.chapter_id = c.id
+        WHERE re.character_id = $1
+          ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
+          AND re.event_type IN ('skill_removed', 'skill_change', 'skill_consolidation')
+          AND re.is_processed = true
+      )
+      SELECT sa.name
+      FROM skill_acquisitions sa
+      LEFT JOIN skill_removals sr
+        ON LOWER(TRIM(sa.name)) = sr.skill_name
+        AND sr.removed_at >= sa.acquired_at
+      WHERE sr.skill_name IS NULL
+      ORDER BY sa.name ASC
     `;
 
     const skillParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
     const skillResult = await pool.query(skillQuery, skillParams);
 
-    // Get all unique spells
+    // Get all unique spells, excluding those that were removed
     const spellQuery = `
-      SELECT DISTINCT a.name, a.type
-      FROM character_abilities ca
-      JOIN abilities a ON ca.ability_id = a.id
-      JOIN chapters c ON ca.chapter_id = c.id
-      WHERE ca.character_id = $1
-        ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
-        AND a.type = 'spell'
-      ORDER BY a.name ASC
+      WITH spell_acquisitions AS (
+        SELECT DISTINCT
+          a.id as ability_id,
+          a.name,
+          ca.chapter_id,
+          c.order_index as acquired_at
+        FROM character_abilities ca
+        JOIN abilities a ON ca.ability_id = a.id
+        JOIN chapters c ON ca.chapter_id = c.id
+        WHERE ca.character_id = $1
+          ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
+          AND a.type = 'spell'
+      ),
+      spell_removals AS (
+        SELECT DISTINCT
+          LOWER(TRIM(re.parsed_data->>'spell_name')) as spell_name,
+          c.order_index as removed_at
+        FROM raw_events re
+        JOIN chapters c ON re.chapter_id = c.id
+        WHERE re.character_id = $1
+          ${maxOrderIndex ? 'AND c.order_index <= $2' : ''}
+          AND re.event_type = 'spell_removed'
+          AND re.is_processed = true
+      )
+      SELECT sa.name
+      FROM spell_acquisitions sa
+      LEFT JOIN spell_removals sr
+        ON LOWER(TRIM(sa.name)) = sr.spell_name
+        AND sr.removed_at >= sa.acquired_at
+      WHERE sr.spell_name IS NULL
+      ORDER BY sa.name ASC
     `;
 
     const spellParams = maxOrderIndex ? [characterId, maxOrderIndex] : [characterId];
