@@ -89,6 +89,13 @@ export async function POST(request: Request) {
           case 'spell_removed':
             result = await processAbilityRemoved(client, event, 'spell');
             break;
+          case 'condition':
+          case 'aspect':
+          case 'title':
+          case 'rank':
+          case 'other':
+            result = await processOtherEvent(client, event);
+            break;
           default:
             errors.push({
               eventId: event.id,
@@ -423,7 +430,7 @@ async function processSkillChange(client: any, event: any) {
   const characterAbilityResult = await client.query(
     `INSERT INTO character_abilities
      (character_id, ability_id, chapter_id, character_class_id, raw_event_id, acquisition_method)
-     VALUES ($1, $2, $3, $4, $5, 'evolved')
+     VALUES ($1, $2, $3, $4, $5, 'level_up')
      ON CONFLICT (character_id, ability_id, chapter_id) DO UPDATE
      SET raw_event_id = $5, character_class_id = $4
      RETURNING *`,
@@ -462,4 +469,16 @@ async function processAbilityRemoved(client: any, event: any, type: 'skill' | 's
   // The summary query will filter based on whether a removal event exists after the acquisition
 
   return { removed_ability: abilityName, type };
+}
+
+async function processOtherEvent(client: any, event: any) {
+  // For condition, aspect, title, rank, and other event types
+  // These are tracked in raw_events but don't create entries in the progression tables
+  // Just mark them as processed for record-keeping
+
+  return {
+    event_type: event.event_type,
+    raw_text: event.raw_text,
+    note: 'Event processed but not added to progression tables (condition/aspect/title/rank/other)'
+  };
 }
