@@ -373,12 +373,36 @@ export default function AdminPage() {
     switch (type) {
       case 'class_obtained':
         return 'bg-purple-100 text-purple-800';
+      case 'class_evolution':
+        return 'bg-purple-200 text-purple-900';
+      case 'class_consolidation':
+        return 'bg-purple-200 text-purple-900';
+      case 'class_removed':
+        return 'bg-red-100 text-red-800';
       case 'level_up':
         return 'bg-blue-100 text-blue-800';
       case 'skill_obtained':
         return 'bg-green-100 text-green-800';
+      case 'skill_change':
+        return 'bg-green-200 text-green-900';
+      case 'skill_consolidation':
+        return 'bg-green-200 text-green-900';
+      case 'skill_removed':
+        return 'bg-red-100 text-red-800';
       case 'spell_obtained':
         return 'bg-yellow-100 text-yellow-800';
+      case 'spell_removed':
+        return 'bg-red-100 text-red-800';
+      case 'condition':
+        return 'bg-orange-100 text-orange-800';
+      case 'aspect':
+        return 'bg-pink-100 text-pink-800';
+      case 'title':
+        return 'bg-indigo-100 text-indigo-800';
+      case 'rank':
+        return 'bg-cyan-100 text-cyan-800';
+      case 'other':
+        return 'bg-slate-100 text-slate-800';
       default:
         return 'bg-gray-100 text-gray-800';
     }

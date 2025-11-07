@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class ProgressionEvent:
     """Represents a single progression event found in text"""
-    event_type: str  # class_obtained, class_evolution, class_consolidation, level_up, skill_change, skill_obtained, spell_obtained, condition, aspect, title, other
+    event_type: str  # class_obtained, class_evolution, class_consolidation, class_removed, level_up, skill_change, skill_consolidation, skill_obtained, skill_removed, spell_obtained, spell_removed, condition, aspect, title, rank, other
     raw_text: str  # Original bracketed text
     parsed_data: Dict[str, Any]  # Structured data
     context: str  # Surrounding text for disambiguation
@@ -42,6 +42,11 @@ class EventParser:
             # Also matches: [Class A + Class B Class Consolidated!]
             r'\[([^\]]+?)\s*\+\s*([^\]]+?)\s+[Cc]lass\s+[Cc]onsolidated!?\]',
         ],
+        'class_removed': [
+            # Matches: [Innkeeper Class Removed!]
+            r'\[([^\]]+?)\s+[Cc]lass\s+[Rr]emoved!?\]',
+            r'\[([^\]]+?)\s+[Cc]lass\s+[Ll]ost\.?\]',
+        ],
         'level_up': [
             r'\[([^\]]+?)\s+[Ll]evel\s+(\d+)!?\]',
             r'\[([^\]]+?)\s+[Ll]v\.?\s+(\d+)!?\]',
@@ -50,17 +55,32 @@ class EventParser:
             # Matches: [Skill Change - Royal Slap → Ghost's Hand!]
             r'\[[Ss]kill\s+[Cc]hange\s*[-–—:]\s*([^\]]+?)\s*[→>-]+\s*([^\]]+?)!?\]',
         ],
+        'skill_consolidation': [
+            # Matches: [Skill Consolidation: Deft Hand removed!]
+            # Note: This captures the OLD skill being removed during consolidation
+            r'\[[Ss]kill\s+[Cc]onsolidation:\s*([^\]]+?)\s+[Rr]emoved!?\]',
+        ],
         'skill_obtained': [
             r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
             r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
             r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
             r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned!?\]',
         ],
+        'skill_removed': [
+            # Matches: [Skill - Aroma of Spring Lost.]
+            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Ll]ost\.?\]',
+            r'\[[Ss]kill\s*[-–—:]\s*([^\]]+?)\s+[Rr]emoved!?\]',
+        ],
         'spell_obtained': [
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Oo]btained!?\]',
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Gg]ained!?\]',
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Aa]cquired!?\]',
             r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Ll]earned!?\]',
+        ],
+        'spell_removed': [
+            # Matches: [Spell - Fireball Lost.]
+            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Ll]ost\.?\]',
+            r'\[[Ss]pell\s*[-–—:]\s*([^\]]+?)\s+[Rr]emoved!?\]',
         ],
         'condition': [
             # Matches: [Condition - Terrible Hunger Received.]
@@ -241,6 +261,13 @@ class EventParser:
                     'consolidated': True
                 }
 
+            elif event_type == 'class_removed':
+                class_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not class_name:
+                    logger.debug(f"Empty class name in: {raw_text}")
+                    return None
+                parsed_data = {'class_name': class_name}
+
             elif event_type == 'level_up':
                 if match.lastindex < 2:
                     logger.debug(f"Insufficient groups in level_up match: {raw_text}")
@@ -270,6 +297,14 @@ class EventParser:
                     'new_skill': new_skill
                 }
 
+            elif event_type == 'skill_consolidation':
+                # This captures the old skill being removed during consolidation
+                skill_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not skill_name:
+                    logger.debug(f"Empty skill name in: {raw_text}")
+                    return None
+                parsed_data = {'skill_name': skill_name, 'consolidated': True}
+
             elif event_type == 'skill_obtained':
                 skill_name = match.group(1).strip() if match.lastindex >= 1 else ''
                 if not skill_name:
@@ -277,7 +312,21 @@ class EventParser:
                     return None
                 parsed_data = {'skill_name': skill_name}
 
+            elif event_type == 'skill_removed':
+                skill_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not skill_name:
+                    logger.debug(f"Empty skill name in: {raw_text}")
+                    return None
+                parsed_data = {'skill_name': skill_name}
+
             elif event_type == 'spell_obtained':
+                spell_name = match.group(1).strip() if match.lastindex >= 1 else ''
+                if not spell_name:
+                    logger.debug(f"Empty spell name in: {raw_text}")
+                    return None
+                parsed_data = {'spell_name': spell_name}
+
+            elif event_type == 'spell_removed':
                 spell_name = match.group(1).strip() if match.lastindex >= 1 else ''
                 if not spell_name:
                     logger.debug(f"Empty spell name in: {raw_text}")
@@ -464,10 +513,14 @@ class EventParser:
             'class_obtained': 0,
             'class_evolution': 0,
             'class_consolidation': 0,
+            'class_removed': 0,
             'level_up': 0,
             'skill_change': 0,
+            'skill_consolidation': 0,
             'skill_obtained': 0,
+            'skill_removed': 0,
             'spell_obtained': 0,
+            'spell_removed': 0,
             'condition': 0,
             'aspect': 0,
             'title': 0,
