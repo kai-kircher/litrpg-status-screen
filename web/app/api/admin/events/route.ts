@@ -74,7 +74,7 @@ export async function GET(request: Request) {
       paramIndex++;
     }
 
-    query += ` ORDER BY c.chapter_number ASC, re.id ASC`;
+    query += ` ORDER BY c.order_index ASC, re.id ASC`;
     query += ` LIMIT $${paramIndex} OFFSET $${paramIndex + 1}`;
     params.push(limit, offset);
 
