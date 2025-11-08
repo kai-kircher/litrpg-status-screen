@@ -109,7 +109,8 @@ class EventParser:
             # Catch-all for other bracketed progression events
             # Matches things like [Reputation Increased] or other unknown formats
             # This should be LAST to avoid false positives
-            r'\[([A-Z][^\]]{10,150}(?:[Oo]btained|[Gg]ained|[Rr]eceived|[Aa]cquired|[Ll]earned|[Ii]ncreased|[Dd]ecreased|[Uu]nlocked))\.?\]',
+            # Negative lookahead to exclude Skill/Spell/Condition/Aspect/Title/Rank patterns
+            r'\[(?![Ss]kill\s*[-–—:]|[Ss]pell\s*[-–—:]|[Cc]ondition\s*[-–—:]|[Aa]spect\s*[-–—:]|[Tt]itle\s*[-–—:]|[Rr]ank\s+\d)([A-Z][^\]]{10,150}(?:[Oo]btained|[Gg]ained|[Rr]eceived|[Aa]cquired|[Ll]earned|[Ii]ncreased|[Dd]ecreased|[Uu]nlocked))[!.]?\]',
         ],
     }
 
