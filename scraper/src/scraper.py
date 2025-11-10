@@ -206,43 +206,25 @@ class WanderingInnScraper:
                 self.stats['errors'] += 1
                 return False
 
-            # Parse events from chapter content (continue even if this fails)
+            # Parse bracket events from chapter content (continue even if this fails)
             events = []
             try:
                 if chapter_data.get('content'):
-                    events = self.event_parser.parse_and_validate(chapter_data['content'])
-
-                    # Check for parsing errors
-                    if hasattr(self.event_parser, 'parse_errors') and self.event_parser.parse_errors:
-                        parsing_had_issues = True
-                        self.stats['parsing_errors'] += len(self.event_parser.parse_errors)
-                        logger.warning(
-                            f"Chapter {chapter_number}: {len(self.event_parser.parse_errors)} "
-                            f"events failed to parse"
-                        )
+                    events = self.event_parser.parse_text(chapter_data['content'])
 
             except Exception as e:
-                logger.warning(f"Event parsing failed for chapter {chapter_number}: {e}")
+                logger.warning(f"Bracket parsing failed for chapter {chapter_number}: {e}")
                 parsing_had_issues = True
                 self.stats['parsing_errors'] += 1
                 # Continue - chapter is still saved
 
             # Log event statistics
-            event_stats = self.event_parser.get_event_stats(events)
-            incomplete_count = sum(1 for e in events if e.is_incomplete)
+            total_events = len(events)
 
             logger.info(
-                f"Chapter {chapter_number} ({chapter_data.get('title', 'Unknown')}): "
-                f"Found {event_stats['total']} events - "
-                f"{event_stats['class_obtained']} classes, "
-                f"{event_stats['level_up']} levels, "
-                f"{event_stats['skill_obtained']} skills, "
-                f"{event_stats['spell_obtained']} spells"
+                f"Chapter {chapter_number} ({chapter_data.get('chapter_title', 'Unknown')}): "
+                f"Found {total_events} bracket events"
             )
-
-            if incomplete_count > 0:
-                logger.info(f"  ({incomplete_count} incomplete/cancelled events)")
-                self.stats['events_incomplete'] += incomplete_count
 
             # Save events to database (continue even if this fails)
             if events:
@@ -250,10 +232,13 @@ class WanderingInnScraper:
                     event_dicts = [
                         {
                             'chapter_id': chapter_id,
-                            'event_type': event.event_type,
+                            'event_type': None,  # Will be classified manually in admin panel
                             'raw_text': event.raw_text,
-                            'parsed_data': event.parsed_data,
-                            'context': event.context
+                            'surrounding_text': event.surrounding_text,
+                            'event_index': event.event_index,
+                            'total_chapter_events': total_events,
+                            'parsed_data': None,  # No automatic parsing
+                            'context': event.surrounding_text  # Legacy column
                         }
                         for event in events
                     ]
@@ -262,7 +247,7 @@ class WanderingInnScraper:
                     self.stats['events_found'] += saved_count
 
                 except Exception as e:
-                    logger.warning(f"Failed to save events for chapter {chapter_number}: {e}")
+                    logger.warning(f"Failed to save bracket events for chapter {chapter_number}: {e}")
                     parsing_had_issues = True
                     # Continue - chapter is still saved
 
@@ -304,21 +289,16 @@ class WanderingInnScraper:
         logger.info(f"Successfully fetched chapter: {chapter_data['chapter_number']}")
         logger.info(f"Word count: {chapter_data['word_count']}")
 
-        # Test event parsing
-        events = self.event_parser.parse_and_validate(chapter_data['content'])
-        event_stats = self.event_parser.get_event_stats(events)
+        # Test bracket parsing
+        events = self.event_parser.parse_text(chapter_data['content'])
 
-        logger.info(f"Found {event_stats['total']} events:")
-        logger.info(f"  - Classes: {event_stats['class_obtained']}")
-        logger.info(f"  - Levels: {event_stats['level_up']}")
-        logger.info(f"  - Skills: {event_stats['skill_obtained']}")
-        logger.info(f"  - Spells: {event_stats['spell_obtained']}")
+        logger.info(f"Found {len(events)} bracket events")
 
         # Show sample events
         if events:
-            logger.info("Sample events:")
-            for event in events[:5]:
-                logger.info(f"  - {event.event_type}: {event.raw_text}")
+            logger.info("Sample bracket events:")
+            for event in events[:10]:
+                logger.info(f"  [{event.event_index}] {event.raw_text[:80]}...")
 
         return True
 

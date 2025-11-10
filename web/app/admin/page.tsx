@@ -4,10 +4,13 @@ import { useState, useEffect } from 'react';
 
 type RawEvent = {
   id: number;
-  event_type: string;
+  event_type: string | null;
   raw_text: string;
   parsed_data: any;
   context: string;
+  surrounding_text: string;
+  event_index: number;
+  total_chapter_events: number;
   is_assigned: boolean;
   is_processed: boolean;
   character_id: number | null;
@@ -41,6 +44,11 @@ export default function AdminPage() {
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
   const limit = 100;
+
+  // Classification state
+  const [classifyingEvent, setClassifyingEvent] = useState<RawEvent | null>(null);
+  const [classificationType, setClassificationType] = useState<string>('');
+  const [classificationTitle, setClassificationTitle] = useState<string>('');
 
   useEffect(() => {
     loadEvents();
@@ -369,6 +377,39 @@ export default function AdminPage() {
     }
   };
 
+  const classifyEvent = async () => {
+    if (!classifyingEvent || !classificationType) {
+      alert('Please select an event type');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/classify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          eventId: classifyingEvent.id,
+          eventType: classificationType,
+          title: classificationTitle,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Event classified successfully');
+        await loadEvents();
+        setClassifyingEvent(null);
+        setClassificationType('');
+        setClassificationTitle('');
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error classifying event:', err);
+      alert('Failed to classify event');
+    }
+  };
+
   const getEventTypeColor = (type: string) => {
     switch (type) {
       case 'class_obtained':
@@ -597,13 +638,24 @@ export default function AdminPage() {
                     {/* Event content */}
                     <div className="flex-1 cursor-pointer" onClick={() => setSelectedEvent(event)}>
                       <div className="flex items-start justify-between mb-2">
-                    <span
-                      className={`px-2 py-1 rounded text-xs font-medium ${getEventTypeColor(
-                        event.event_type
-                      )}`}
-                    >
-                      {event.event_type.replace('_', ' ')}
-                    </span>
+                    <div className="flex items-center gap-2">
+                      {event.event_type ? (
+                        <span
+                          className={`px-2 py-1 rounded text-xs font-medium ${getEventTypeColor(
+                            event.event_type
+                          )}`}
+                        >
+                          {event.event_type.replace('_', ' ')}
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 rounded text-xs font-medium bg-gray-100 text-gray-600">
+                          unclassified
+                        </span>
+                      )}
+                      <span className="text-xs text-gray-500">
+                        #{event.event_index + 1} of {event.total_chapter_events}
+                      </span>
+                    </div>
                     <span className="text-sm text-gray-500">{event.chapter_number}</span>
                   </div>
 
@@ -637,6 +689,19 @@ export default function AdminPage() {
 
                   {/* Action buttons */}
                   <div className="mt-2 flex gap-2">
+                    {!event.event_type && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setClassifyingEvent(event);
+                          setClassificationType('');
+                          setClassificationTitle('');
+                        }}
+                        className="text-xs px-2 py-1 bg-indigo-600 text-white hover:bg-indigo-700 rounded"
+                      >
+                        Classify
+                      </button>
+                    )}
                     {statusFilter === 'archived' ? (
                       <button
                         onClick={(e) => {
@@ -868,6 +933,90 @@ export default function AdminPage() {
           </div>
         </div>
       </div>
+
+      {/* Classification Modal */}
+      {classifyingEvent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4">
+            <h2 className="text-xl font-semibold mb-4">Classify Event</h2>
+
+            {/* Event Info */}
+            <div className="bg-gray-50 p-4 rounded mb-4">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs text-gray-500">
+                  Chapter {classifyingEvent.chapter_number} - Event #{classifyingEvent.event_index + 1} of {classifyingEvent.total_chapter_events}
+                </span>
+              </div>
+              <p className="font-mono text-sm mb-2">{classifyingEvent.raw_text}</p>
+              {classifyingEvent.surrounding_text && (
+                <details className="mt-2">
+                  <summary className="text-xs text-indigo-600 cursor-pointer">Show Context</summary>
+                  <p className="text-xs text-gray-600 mt-2 whitespace-pre-wrap">{classifyingEvent.surrounding_text}</p>
+                </details>
+              )}
+            </div>
+
+            {/* Classification Form */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Event Type *</label>
+                <select
+                  value={classificationType}
+                  onChange={(e) => setClassificationType(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="">Select event type...</option>
+                  <option value="class_obtained">Class Obtained</option>
+                  <option value="class_evolution">Class Evolution</option>
+                  <option value="class_consolidation">Class Consolidation</option>
+                  <option value="class_removed">Class Removed</option>
+                  <option value="level_up">Level Up</option>
+                  <option value="ability_obtained">Ability Obtained (Skill/Spell/Song/Condition/etc)</option>
+                  <option value="ability_removed">Ability Removed</option>
+                  <option value="other">Other</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Title/Details {classificationType && '(optional)'}
+                </label>
+                <input
+                  type="text"
+                  value={classificationTitle}
+                  onChange={(e) => setClassificationTitle(e.target.value)}
+                  placeholder="e.g., Innkeeper, Level 20, Minotaur's Punch, etc."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Optional: Add specific details like class name, level number, skill name, etc.
+                </p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={classifyEvent}
+                disabled={!classificationType}
+                className="flex-1 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Classification
+              </button>
+              <button
+                onClick={() => {
+                  setClassifyingEvent(null);
+                  setClassificationType('');
+                  setClassificationTitle('');
+                }}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

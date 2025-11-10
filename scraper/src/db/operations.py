@@ -173,10 +173,13 @@ def save_raw_events_batch(events: List[Dict[str, Any]]) -> int:
     Args:
         events: List of event dictionaries with keys:
             - chapter_id
-            - event_type
+            - event_type (nullable - for manual classification)
             - raw_text
-            - parsed_data
-            - context (optional)
+            - surrounding_text
+            - event_index
+            - total_chapter_events
+            - parsed_data (nullable)
+            - context (optional, legacy)
 
     Returns:
         Number of events saved
@@ -192,12 +195,16 @@ def save_raw_events_batch(events: List[Dict[str, Any]]) -> int:
         # Prepare data for batch insert
         values = []
         for event in events:
+            parsed_data_json = json.dumps(event['parsed_data']) if event.get('parsed_data') else None
             values.append((
                 event['chapter_id'],
-                event['event_type'],
+                event.get('event_type'),  # Nullable
                 event['raw_text'],
-                json.dumps(event['parsed_data']),
-                event.get('context')
+                parsed_data_json,
+                event.get('context'),
+                event.get('surrounding_text'),
+                event.get('event_index'),
+                event.get('total_chapter_events')
             ))
 
         # Use execute_batch for better performance
@@ -205,8 +212,11 @@ def save_raw_events_batch(events: List[Dict[str, Any]]) -> int:
         execute_batch(
             cursor,
             """
-            INSERT INTO raw_events (chapter_id, event_type, raw_text, parsed_data, context)
-            VALUES (%s, %s, %s, %s, %s)
+            INSERT INTO raw_events (
+                chapter_id, event_type, raw_text, parsed_data, context,
+                surrounding_text, event_index, total_chapter_events
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             """,
             values
         )
@@ -215,7 +225,7 @@ def save_raw_events_batch(events: List[Dict[str, Any]]) -> int:
         count = len(events)
         cursor.close()
 
-        logger.info(f"Saved {count} raw events in batch")
+        logger.info(f"Saved {count} raw bracket events in batch")
         return count
     except Exception as e:
         logger.error(f"Error saving raw events batch: {e}")
