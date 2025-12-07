@@ -127,13 +127,16 @@ pull_images() {
 run_migrations() {
     log "Running database migrations..."
 
+    local db_user="${DB_USER:-wandering_inn}"
+    local db_name="${DB_NAME:-wandering_inn_tracker}"
+
     # Wait for database to be ready
     log "Waiting for database to be ready..."
     local max_attempts=30
     local attempt=1
 
     while [ $attempt -le $max_attempts ]; do
-        if $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "${DB_USER:-wandering_inn}" -d "${DB_NAME:-wandering_inn_tracker}" &>/dev/null; then
+        if $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "$db_user" &>/dev/null; then
             log "Database is ready"
             break
         fi
@@ -146,26 +149,54 @@ run_migrations() {
         return 1
     fi
 
-    # Run migration script if it exists
-    if [ -f "${SCRIPT_DIR}/database/migrate.sh" ]; then
-        log "Running migrate.sh..."
-        cd "${SCRIPT_DIR}/database"
-        chmod +x migrate.sh
-        ./migrate.sh
-        cd "$SCRIPT_DIR"
-    else
-        # Fallback: run migrations via psql in container
-        log "Running SQL migrations..."
-        for migration in "${SCRIPT_DIR}"/database/migrations/*.sql; do
-            if [ -f "$migration" ]; then
-                local basename=$(basename "$migration")
-                log "  Running: $basename"
-                $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres \
-                    psql -U "${DB_USER:-wandering_inn}" -d "${DB_NAME:-wandering_inn_tracker}" \
-                    -f "/docker-entrypoint-initdb.d/migrations/$basename" 2>/dev/null || true
-            fi
-        done
+    # Check if database exists, create if not
+    log "Checking if database exists..."
+    if ! $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres psql -U "$db_user" -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='$db_name'" | grep -q 1; then
+        log "Creating database '$db_name'..."
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres psql -U "$db_user" -d postgres -c "CREATE DATABASE $db_name;"
     fi
+
+    # Run migrations via psql inside the container (more reliable than host)
+    log "Running SQL migrations inside container..."
+
+    # First, ensure migrations table exists
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres \
+        psql -U "$db_user" -d "$db_name" \
+        -f "/docker-entrypoint-initdb.d/migrations/000_create_migrations_table.sql" 2>/dev/null || true
+
+    # Run each migration in order
+    for migration in "${SCRIPT_DIR}"/database/migrations/*.sql; do
+        if [ -f "$migration" ]; then
+            local basename=$(basename "$migration")
+
+            # Skip the migrations table creation (already done)
+            if [ "$basename" = "000_create_migrations_table.sql" ]; then
+                continue
+            fi
+
+            # Check if migration already applied
+            local applied=$($DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres \
+                psql -U "$db_user" -d "$db_name" -tAc \
+                "SELECT 1 FROM schema_migrations WHERE migration_name='$basename'" 2>/dev/null || echo "")
+
+            if [ "$applied" != "1" ]; then
+                log "  Applying: $basename"
+                if $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres \
+                    psql -U "$db_user" -d "$db_name" \
+                    -f "/docker-entrypoint-initdb.d/migrations/$basename"; then
+                    # Record migration
+                    $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres \
+                        psql -U "$db_user" -d "$db_name" \
+                        -c "INSERT INTO schema_migrations (migration_name) VALUES ('$basename') ON CONFLICT DO NOTHING;"
+                else
+                    error "Failed to apply migration: $basename"
+                    return 1
+                fi
+            else
+                log "  Skipping (already applied): $basename"
+            fi
+        fi
+    done
 
     log "Migrations completed"
 }
