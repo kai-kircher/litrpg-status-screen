@@ -30,8 +30,15 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
+# Install Docker CLI for spawning scraper jobs
+RUN apk add --no-cache docker-cli
+
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
+
+# Add nextjs user to docker group (gid 999 is typical for docker socket)
+RUN addgroup -g 999 docker || true
+RUN addgroup nextjs docker || true
 
 # Copy built application
 COPY --from=builder /app/public ./public
