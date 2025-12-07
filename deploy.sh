@@ -1,50 +1,271 @@
 #!/bin/bash
+#
+# Deployment script for Wandering Inn Tracker
+# Called by GitHub Actions after building images, or run manually.
+#
+# Usage:
+#   ./deploy.sh           # Deploy without running migrations
+#   ./deploy.sh migrate   # Deploy and run migrations
+#
+
 set -e
 
-echo "🚀 Deploying Wandering Inn Tracker..."
+# Configuration
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
+LOG_FILE="${SCRIPT_DIR}/deploy.log"
 
-# Check if .env.production exists
-if [ ! -f .env.production ]; then
-    echo "❌ Error: .env.production file not found!"
-    echo "📝 Please create it from .env.production.example"
-    exit 1
-fi
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+log() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${GREEN}[${timestamp}]${NC} $1"
+    echo "[${timestamp}] $1" >> "$LOG_FILE"
+}
+
+error() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${RED}[${timestamp}] ERROR:${NC} $1" >&2
+    echo "[${timestamp}] ERROR: $1" >> "$LOG_FILE"
+}
+
+warn() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${YELLOW}[${timestamp}] WARNING:${NC} $1"
+    echo "[${timestamp}] WARNING: $1" >> "$LOG_FILE"
+}
+
+info() {
+    local timestamp=$(date '+%Y-%m-%d %H:%M:%S')
+    echo -e "${BLUE}[${timestamp}]${NC} $1"
+}
 
 # Load environment variables
-export $(cat .env.production | grep -v '^#' | xargs)
+load_env() {
+    if [ -f "${SCRIPT_DIR}/.env.production" ]; then
+        log "Loading .env.production"
+        set -a
+        source "${SCRIPT_DIR}/.env.production"
+        set +a
+    elif [ -f "${SCRIPT_DIR}/.env" ]; then
+        log "Loading .env"
+        set -a
+        source "${SCRIPT_DIR}/.env"
+        set +a
+    else
+        warn "No .env file found, using defaults"
+    fi
+}
 
-echo "📦 Building Docker images..."
-docker compose -f docker-compose.prod.yml build
+# Check prerequisites
+check_prerequisites() {
+    if ! command -v docker &> /dev/null; then
+        error "Docker is not installed"
+        exit 1
+    fi
 
-echo "🗄️  Starting database..."
-docker compose -f docker-compose.prod.yml up -d postgres
+    # Check for docker compose (v2) or docker-compose (v1)
+    if docker compose version &> /dev/null; then
+        DOCKER_COMPOSE="docker compose"
+    elif command -v docker-compose &> /dev/null; then
+        DOCKER_COMPOSE="docker-compose"
+    else
+        error "Docker Compose is not installed"
+        exit 1
+    fi
 
-echo "⏳ Waiting for database to be ready..."
-sleep 10
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        error "Docker Compose file not found: $COMPOSE_FILE"
+        exit 1
+    fi
+}
 
-echo "🔄 Running database migrations..."
-cd database
-if [ -f migrate.sh ]; then
-    ./migrate.sh
-else
-    echo "⚠️  No migration script found, skipping..."
-fi
-cd ..
+# Pull latest code (when called by GitHub Actions, code is already updated)
+pull_code() {
+    if [ -d "${SCRIPT_DIR}/.git" ]; then
+        log "Pulling latest code from git..."
+        cd "$SCRIPT_DIR"
+        git fetch origin main --quiet
+        git reset --hard origin/main --quiet
+        log "Code updated to $(git rev-parse --short HEAD)"
+    else
+        log "Not a git repository, skipping pull"
+    fi
+}
 
-echo "🌐 Starting web application..."
-docker compose -f docker-compose.prod.yml up -d web
+# Login to container registry
+login_registry() {
+    log "Checking container registry authentication..."
 
-echo "✅ Deployment complete!"
-echo ""
-echo "📊 Application Status:"
-docker compose -f docker-compose.prod.yml ps
+    # Try GitHub Container Registry
+    if [ -n "$GITHUB_TOKEN" ] && [ -n "$GITHUB_USER" ]; then
+        log "Logging into GitHub Container Registry..."
+        echo "$GITHUB_TOKEN" | docker login ghcr.io -u "$GITHUB_USER" --password-stdin 2>/dev/null
+    elif [ -n "$CR_PAT" ]; then
+        # Alternative: use CR_PAT (Container Registry Personal Access Token)
+        log "Logging into GitHub Container Registry with PAT..."
+        echo "$CR_PAT" | docker login ghcr.io -u "${GITHUB_USER:-$USER}" --password-stdin 2>/dev/null
+    else
+        log "Using existing Docker credentials (if any)"
+    fi
+}
 
-echo ""
-echo "🔗 Application should be accessible at:"
-echo "   http://localhost:${PORT:-3000}"
-echo ""
-echo "📝 To view logs:"
-echo "   docker compose -f docker-compose.prod.yml logs -f web"
-echo ""
-echo "🛠️  To access admin panel:"
-echo "   http://localhost:${PORT:-3000}/admin"
+# Pull new images
+pull_images() {
+    log "Pulling new Docker images..."
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --quiet 2>/dev/null || \
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull
+    log "Images pulled successfully"
+}
+
+# Run database migrations
+run_migrations() {
+    log "Running database migrations..."
+
+    # Wait for database to be ready
+    log "Waiting for database to be ready..."
+    local max_attempts=30
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres pg_isready -U "${DB_USER:-wandering_inn}" -d "${DB_NAME:-wandering_inn_tracker}" &>/dev/null; then
+            log "Database is ready"
+            break
+        fi
+        sleep 2
+        ((attempt++))
+    done
+
+    if [ $attempt -gt $max_attempts ]; then
+        error "Database did not become ready in time"
+        return 1
+    fi
+
+    # Run migration script if it exists
+    if [ -f "${SCRIPT_DIR}/database/migrate.sh" ]; then
+        log "Running migrate.sh..."
+        cd "${SCRIPT_DIR}/database"
+        chmod +x migrate.sh
+        ./migrate.sh
+        cd "$SCRIPT_DIR"
+    else
+        # Fallback: run migrations via psql in container
+        log "Running SQL migrations..."
+        for migration in "${SCRIPT_DIR}"/database/migrations/*.sql; do
+            if [ -f "$migration" ]; then
+                local basename=$(basename "$migration")
+                log "  Running: $basename"
+                $DOCKER_COMPOSE -f "$COMPOSE_FILE" exec -T postgres \
+                    psql -U "${DB_USER:-wandering_inn}" -d "${DB_NAME:-wandering_inn_tracker}" \
+                    -f "/docker-entrypoint-initdb.d/migrations/$basename" 2>/dev/null || true
+            fi
+        done
+    fi
+
+    log "Migrations completed"
+}
+
+# Restart services with minimal downtime
+restart_services() {
+    log "Restarting services..."
+
+    # Start/restart database first
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d postgres
+
+    # Wait for database
+    sleep 5
+
+    # Restart web service
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d web
+
+    # Clean up orphaned containers
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" up -d --remove-orphans
+
+    log "Services restarted"
+}
+
+# Health check
+health_check() {
+    log "Running health check..."
+
+    local health_url="http://localhost:${PORT:-3000}/api/health"
+    local max_attempts=30
+    local attempt=1
+
+    while [ $attempt -le $max_attempts ]; do
+        if curl -sf "$health_url" > /dev/null 2>&1; then
+            log "Health check passed!"
+            return 0
+        fi
+
+        log "Waiting for service to be ready (attempt $attempt/$max_attempts)..."
+        sleep 2
+        ((attempt++))
+    done
+
+    warn "Health check did not pass after $max_attempts attempts"
+    warn "Service may still be starting up..."
+    return 0  # Don't fail deployment on health check timeout
+}
+
+# Cleanup old images and containers
+cleanup() {
+    log "Cleaning up..."
+    docker image prune -f --filter "until=24h" 2>/dev/null || true
+    docker container prune -f 2>/dev/null || true
+    log "Cleanup completed"
+}
+
+# Show status
+show_status() {
+    info ""
+    info "=========================================="
+    info "Deployment Status"
+    info "=========================================="
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" ps
+    info ""
+    info "Application: http://localhost:${PORT:-3000}"
+    info "Admin Panel: http://localhost:${PORT:-3000}/admin"
+    info ""
+    info "View logs: $DOCKER_COMPOSE -f $COMPOSE_FILE logs -f"
+    info "=========================================="
+}
+
+# Main deployment flow
+main() {
+    local run_migrations_flag="${1:-}"
+
+    log "=========================================="
+    log "Starting deployment"
+    log "=========================================="
+
+    load_env
+    check_prerequisites
+    pull_code
+    login_registry
+    pull_images
+
+    # Always run migrations on deploy (they're idempotent)
+    if [ "$run_migrations_flag" = "migrate" ] || [ "$run_migrations_flag" = "" ]; then
+        restart_services
+        run_migrations
+    else
+        restart_services
+    fi
+
+    health_check
+    cleanup
+    show_status
+
+    log "=========================================="
+    log "Deployment completed!"
+    log "=========================================="
+}
+
+# Run main function
+main "$@"

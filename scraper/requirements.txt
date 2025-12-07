@@ -16,3 +16,6 @@ click>=8.1.7
 
 # Logging
 colorlog>=6.8.0
+
+# AI
+anthropic>=0.40.0

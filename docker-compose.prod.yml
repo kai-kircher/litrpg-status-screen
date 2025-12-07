@@ -24,6 +24,7 @@ services:
 
   # Web Application
   web:
+    image: ${WEB_IMAGE:-ghcr.io/tamak/wandering-inn-tracker/web:latest}
     build:
       context: ./web
       dockerfile: Dockerfile
@@ -35,8 +36,15 @@ services:
       DB_USER: ${DB_USER:-wandering_inn}
       DB_PASSWORD: ${DB_PASSWORD}
       NODE_ENV: production
+      # Admin authentication
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      # For spawning scraper jobs
+      DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
     ports:
       - "${PORT:-3000}:3000"
+    volumes:
+      # Mount Docker socket for spawning scraper containers
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,8 +58,9 @@ services:
       retries: 3
       start_period: 40s
 
-  # Scraper Service (optional, run manually or via cron)
+  # Scraper Service (run via docker-compose run or triggered from web)
   scraper:
+    image: ${SCRAPER_IMAGE:-ghcr.io/tamak/wandering-inn-tracker/scraper:latest}
     build:
       context: ./scraper
       dockerfile: Dockerfile
@@ -62,6 +71,8 @@ services:
       DB_NAME: ${DB_NAME:-wandering_inn_tracker}
       DB_USER: ${DB_USER:-wandering_inn}
       DB_PASSWORD: ${DB_PASSWORD}
+      # AI Processing
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     depends_on:
       postgres:
         condition: service_healthy

@@ -1,6 +1,33 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+
+type Job = {
+  id: number;
+  job_type: string;
+  status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled';
+  started_at: string | null;
+  completed_at: string | null;
+  config: any;
+  progress: any;
+  result: any;
+  error_message: string | null;
+  created_at: string;
+};
+
+type Stats = {
+  chapters: { total: number; scraped: number };
+  characters: number;
+  events: {
+    total: number;
+    assigned: number;
+    processed: number;
+    archived: number;
+    byType: { event_type: string; count: string }[];
+  };
+  recentJobs: Job[];
+  aiStats: any[] | null;
+};
 
 type RawEvent = {
   id: number;
@@ -49,6 +76,105 @@ export default function AdminPage() {
   const [classifyingEvent, setClassifyingEvent] = useState<RawEvent | null>(null);
   const [classificationType, setClassificationType] = useState<string>('');
   const [classificationTitle, setClassificationTitle] = useState<string>('');
+
+  // Jobs & Stats state
+  const [stats, setStats] = useState<Stats | null>(null);
+  const [runningJob, setRunningJob] = useState<Job | null>(null);
+  const [showJobPanel, setShowJobPanel] = useState(true);
+  const [jobConfig, setJobConfig] = useState<{
+    startChapter?: number;
+    endChapter?: number;
+    maxChapters?: number;
+    dryRun?: boolean;
+  }>({});
+
+  // Load stats
+  const loadStats = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/stats');
+      const data = await response.json();
+      setStats(data);
+    } catch (err) {
+      console.error('Error loading stats:', err);
+    }
+  }, []);
+
+  // Load jobs
+  const loadJobs = useCallback(async () => {
+    try {
+      const response = await fetch('/api/admin/jobs?limit=5');
+      const data = await response.json();
+      setRunningJob(data.running);
+    } catch (err) {
+      console.error('Error loading jobs:', err);
+    }
+  }, []);
+
+  // Start a job
+  const startJob = async (jobType: string) => {
+    if (runningJob) {
+      alert('A job is already running');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/admin/jobs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jobType, config: jobConfig }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Job started: ${data.message}`);
+        loadJobs();
+        setJobConfig({});
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error starting job:', err);
+      alert('Failed to start job');
+    }
+  };
+
+  // Cancel a job
+  const cancelJob = async () => {
+    if (!runningJob) return;
+
+    if (!confirm('Are you sure you want to cancel the running job?')) return;
+
+    try {
+      const response = await fetch(`/api/admin/jobs?jobId=${runningJob.id}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        alert('Job cancelled');
+        loadJobs();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error cancelling job:', err);
+      alert('Failed to cancel job');
+    }
+  };
+
+  // Initial load and polling
+  useEffect(() => {
+    loadStats();
+    loadJobs();
+
+    // Poll for job status every 5 seconds
+    const interval = setInterval(() => {
+      loadJobs();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [loadStats, loadJobs]);
 
   useEffect(() => {
     loadEvents();
@@ -461,13 +587,188 @@ export default function AdminPage() {
   return (
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Event Assignment Admin</h1>
+        <h1 className="text-3xl font-bold mb-6">Admin Dashboard</h1>
 
         {error && (
           <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
             {error}
           </div>
         )}
+
+        {/* Stats & Jobs Panel */}
+        <div className="mb-6">
+          <button
+            onClick={() => setShowJobPanel(!showJobPanel)}
+            className="flex items-center gap-2 text-lg font-semibold text-gray-700 hover:text-gray-900 mb-3"
+          >
+            <span>{showJobPanel ? '▼' : '▶'}</span>
+            <span>Stats & Jobs</span>
+            {runningJob && (
+              <span className="ml-2 px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded animate-pulse">
+                Job Running
+              </span>
+            )}
+          </button>
+
+          {showJobPanel && (
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+              {/* Stats Card */}
+              <div className="bg-white rounded-lg shadow p-4">
+                <h3 className="font-semibold mb-3">Database Stats</h3>
+                {stats ? (
+                  <div className="grid grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <p className="text-gray-500">Chapters</p>
+                      <p className="text-xl font-bold">
+                        {stats.chapters.scraped}
+                        <span className="text-gray-400 text-sm font-normal">
+                          /{stats.chapters.total}
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Characters</p>
+                      <p className="text-xl font-bold">{stats.characters}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Events</p>
+                      <p className="text-xl font-bold">{stats.events.total}</p>
+                    </div>
+                    <div>
+                      <p className="text-gray-500">Processed</p>
+                      <p className="text-xl font-bold text-green-600">
+                        {stats.events.processed}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-gray-400">Loading stats...</p>
+                )}
+              </div>
+
+              {/* Jobs Card */}
+              <div className="bg-white rounded-lg shadow p-4">
+                <h3 className="font-semibold mb-3">Background Jobs</h3>
+
+                {runningJob ? (
+                  <div className="mb-4 p-3 bg-blue-50 border border-blue-200 rounded">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-medium text-blue-900">
+                        {runningJob.job_type}
+                      </span>
+                      <span className="text-xs text-blue-600 animate-pulse">
+                        Running...
+                      </span>
+                    </div>
+                    {runningJob.progress && (
+                      <p className="text-xs text-blue-700 mb-2">
+                        Chapters: {runningJob.progress.chaptersProcessed || 0}
+                        {runningJob.progress.eventsProcessed ? `, Events: ${runningJob.progress.eventsProcessed}` : ''}
+                      </p>
+                    )}
+                    <button
+                      onClick={cancelJob}
+                      className="text-xs px-3 py-1 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                    >
+                      Cancel Job
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {/* Job Config */}
+                    <div className="flex gap-2 text-sm">
+                      <input
+                        type="number"
+                        placeholder="Start"
+                        value={jobConfig.startChapter || ''}
+                        onChange={(e) => setJobConfig({...jobConfig, startChapter: e.target.value ? parseInt(e.target.value) : undefined})}
+                        className="w-20 px-2 py-1 border rounded"
+                      />
+                      <input
+                        type="number"
+                        placeholder="End"
+                        value={jobConfig.endChapter || ''}
+                        onChange={(e) => setJobConfig({...jobConfig, endChapter: e.target.value ? parseInt(e.target.value) : undefined})}
+                        className="w-20 px-2 py-1 border rounded"
+                      />
+                      <input
+                        type="number"
+                        placeholder="Max"
+                        value={jobConfig.maxChapters || ''}
+                        onChange={(e) => setJobConfig({...jobConfig, maxChapters: e.target.value ? parseInt(e.target.value) : undefined})}
+                        className="w-20 px-2 py-1 border rounded"
+                      />
+                      <label className="flex items-center gap-1 text-xs">
+                        <input
+                          type="checkbox"
+                          checked={jobConfig.dryRun || false}
+                          onChange={(e) => setJobConfig({...jobConfig, dryRun: e.target.checked})}
+                        />
+                        Dry run
+                      </label>
+                    </div>
+
+                    {/* Job Buttons */}
+                    <div className="flex flex-wrap gap-2">
+                      <button
+                        onClick={() => startJob('build-toc')}
+                        className="px-3 py-1.5 text-sm bg-gray-600 text-white rounded hover:bg-gray-700"
+                      >
+                        Build ToC
+                      </button>
+                      <button
+                        onClick={() => startJob('scrape')}
+                        className="px-3 py-1.5 text-sm bg-blue-600 text-white rounded hover:bg-blue-700"
+                      >
+                        Scrape
+                      </button>
+                      <button
+                        onClick={() => startJob('extract-characters')}
+                        className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
+                      >
+                        Extract Characters
+                      </button>
+                      <button
+                        onClick={() => startJob('attribute-events')}
+                        className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                      >
+                        Attribute Events
+                      </button>
+                      <button
+                        onClick={() => startJob('process-ai')}
+                        className="px-3 py-1.5 text-sm bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                      >
+                        Full AI Process
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Recent Jobs */}
+                {stats?.recentJobs && stats.recentJobs.length > 0 && (
+                  <div className="mt-4 pt-3 border-t">
+                    <p className="text-xs text-gray-500 mb-2">Recent Jobs</p>
+                    <div className="space-y-1">
+                      {stats.recentJobs.slice(0, 3).map((job) => (
+                        <div key={job.id} className="flex items-center justify-between text-xs">
+                          <span className="font-medium">{job.job_type}</span>
+                          <span className={
+                            job.status === 'completed' ? 'text-green-600' :
+                            job.status === 'failed' ? 'text-red-600' :
+                            job.status === 'running' ? 'text-blue-600' :
+                            'text-gray-500'
+                          }>
+                            {job.status}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
 
         {/* Filters */}
         <div className="mb-6 space-y-4">
