@@ -46,16 +46,22 @@ function Invoke-Psql {
     & psql @args
 }
 
-# Function to check database connection
+# Function to check database connection, create if missing
 function Test-DatabaseConnection {
     Write-Host "Checking database connection..." -ForegroundColor Cyan
 
     $result = Invoke-Psql -Database "postgres" -Query "SELECT 1 FROM pg_database WHERE datname='$DB_NAME';" 2>$null
 
-    if (-not $result) {
-        Write-Host "Error: Database '$DB_NAME' does not exist" -ForegroundColor Red
-        Write-Host "Please create it first with: docker-compose up -d postgres"
-        exit 1
+    if (-not $result -or $result -notmatch "1") {
+        Write-Host "Database '$DB_NAME' does not exist, creating..." -ForegroundColor Yellow
+        try {
+            Invoke-Psql -Database "postgres" -Query "CREATE DATABASE $DB_NAME;"
+            Write-Host "Database '$DB_NAME' created successfully" -ForegroundColor Green
+        } catch {
+            Write-Host "Error: Failed to create database '$DB_NAME'" -ForegroundColor Red
+            Write-Host $_.Exception.Message -ForegroundColor Red
+            exit 1
+        }
     }
 
     Write-Host "Database connection successful" -ForegroundColor Green
