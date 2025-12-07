@@ -24,7 +24,7 @@ services:
 
   # Web Application
   web:
-    image: ${WEB_IMAGE:-ghcr.io/tamak/wandering-inn-tracker/web:latest}
+    image: ${WEB_IMAGE:-ghcr.io/kai-kircher/litrpg-status-screen/web:latest}
     build:
       context: ./web
       dockerfile: Dockerfile
@@ -60,7 +60,7 @@ services:
 
   # Scraper Service (run via docker-compose run or triggered from web)
   scraper:
-    image: ${SCRAPER_IMAGE:-ghcr.io/tamak/wandering-inn-tracker/scraper:latest}
+    image: ${SCRAPER_IMAGE:-ghcr.io/kai-kircher/litrpg-status-screen/scraper:latest}
     build:
       context: ./scraper
       dockerfile: Dockerfile
