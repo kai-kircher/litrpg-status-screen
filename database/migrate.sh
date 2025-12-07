@@ -28,13 +28,17 @@ YELLOW='\033[1;33m'
 RED='\033[0;31m'
 NC='\033[0m' # No Color
 
-# Function to check if database exists
+# Function to check if database exists, create if missing
 check_database() {
     echo "Checking database connection..."
     if ! PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -lqt 2>/dev/null | cut -d \| -f 1 | grep -qw $DB_NAME; then
-        echo -e "${RED}Error: Database '$DB_NAME' does not exist${NC}"
-        echo "Please create it first with: docker-compose up -d postgres"
-        exit 1
+        echo -e "${YELLOW}Database '$DB_NAME' does not exist, creating...${NC}"
+        if PGPASSWORD=$DB_PASSWORD psql -h $DB_HOST -p $DB_PORT -U $DB_USER -d postgres -c "CREATE DATABASE $DB_NAME;" 2>/dev/null; then
+            echo -e "${GREEN}Database '$DB_NAME' created successfully${NC}"
+        else
+            echo -e "${RED}Error: Failed to create database '$DB_NAME'${NC}"
+            exit 1
+        fi
     fi
     echo -e "${GREEN}Database connection successful${NC}"
 }
