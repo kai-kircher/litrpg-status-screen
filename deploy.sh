@@ -10,6 +10,9 @@
 
 set -e
 
+# Store original arguments for potential re-exec
+ORIGINAL_ARGS=("$@")
+
 # Configuration
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPOSE_FILE="${SCRIPT_DIR}/docker-compose.prod.yml"
@@ -85,14 +88,25 @@ check_prerequisites() {
     fi
 }
 
-# Pull latest code (when called by GitHub Actions, code is already updated)
+# Pull latest code and re-exec if script changed
 pull_code() {
     if [ -d "${SCRIPT_DIR}/.git" ]; then
+        # Get current script hash before pull
+        local old_hash=$(md5sum "${SCRIPT_DIR}/deploy.sh" 2>/dev/null | cut -d' ' -f1)
+
         log "Pulling latest code from git..."
         cd "$SCRIPT_DIR"
         git fetch origin main --quiet
         git reset --hard origin/main --quiet
         log "Code updated to $(git rev-parse --short HEAD)"
+
+        # Check if deploy.sh changed and we haven't already re-execed
+        local new_hash=$(md5sum "${SCRIPT_DIR}/deploy.sh" 2>/dev/null | cut -d' ' -f1)
+        if [ "$old_hash" != "$new_hash" ] && [ -z "$DEPLOY_REEXEC" ]; then
+            log "deploy.sh changed, re-executing with new version..."
+            export DEPLOY_REEXEC=1
+            exec "${SCRIPT_DIR}/deploy.sh" "${ORIGINAL_ARGS[@]}"
+        fi
     else
         log "Not a git repository, skipping pull"
     fi

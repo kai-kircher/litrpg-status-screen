@@ -94,6 +94,9 @@ jobs:
           port: ${{ secrets.SERVER_SSH_PORT || 22 }}
           script: |
             cd ${{ secrets.APP_PATH || '/app/wandering-inn-tracker' }}
+            git fetch origin main
+            git reset --hard origin/main
+            chmod +x deploy.sh
             ./deploy.sh ${{ inputs.run_migrations && 'migrate' || '' }}
 
   notify:
