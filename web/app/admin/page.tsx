@@ -53,7 +53,15 @@ type Character = {
   id: number;
   name: string;
   aliases: string[] | null;
+  first_appearance_chapter_id: number | null;
+  notes: string | null;
   created_at: string;
+};
+
+type Chapter = {
+  id: number;
+  chapter_number: string;
+  title: string | null;
 };
 
 export default function AdminPage() {
@@ -76,6 +84,26 @@ export default function AdminPage() {
   const [classifyingEvent, setClassifyingEvent] = useState<RawEvent | null>(null);
   const [classificationType, setClassificationType] = useState<string>('');
   const [classificationTitle, setClassificationTitle] = useState<string>('');
+
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'events' | 'characters'>('events');
+
+  // Character management state
+  const [allCharacters, setAllCharacters] = useState<Character[]>([]);
+  const [characterSearchTerm, setCharacterSearchTerm] = useState('');
+  const [editingCharacter, setEditingCharacter] = useState<Character | null>(null);
+  const [characterFormData, setCharacterFormData] = useState<{
+    name: string;
+    aliases: string[];
+    first_appearance_chapter_id: number | null;
+    notes: string;
+  }>({ name: '', aliases: [], first_appearance_chapter_id: null, notes: '' });
+  const [newAliasInput, setNewAliasInput] = useState('');
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [characterLoading, setCharacterLoading] = useState(false);
+  const [characterOffset, setCharacterOffset] = useState(0);
+  const [characterTotal, setCharacterTotal] = useState(0);
+  const characterLimit = 50;
 
   // Jobs & Stats state
   const [stats, setStats] = useState<Stats | null>(null);
@@ -536,6 +564,151 @@ export default function AdminPage() {
     }
   };
 
+  // Character Management Functions
+  const loadAllCharacters = useCallback(async () => {
+    setCharacterLoading(true);
+    try {
+      let url = `/api/characters?limit=${characterLimit}&offset=${characterOffset}`;
+      if (characterSearchTerm) {
+        url = `/api/characters?search=${encodeURIComponent(characterSearchTerm)}`;
+      }
+      const response = await fetch(url);
+      const data = await response.json();
+      setAllCharacters(data);
+      // For now, estimate total from returned count
+      setCharacterTotal(data.length >= characterLimit ? characterOffset + characterLimit + 1 : characterOffset + data.length);
+    } catch (err) {
+      console.error('Error loading characters:', err);
+    } finally {
+      setCharacterLoading(false);
+    }
+  }, [characterOffset, characterSearchTerm]);
+
+  const loadChapters = useCallback(async () => {
+    try {
+      const response = await fetch('/api/chapters');
+      const data = await response.json();
+      setChapters(data);
+    } catch (err) {
+      console.error('Error loading chapters:', err);
+    }
+  }, []);
+
+  // Load chapters when tab changes to characters
+  useEffect(() => {
+    if (activeTab === 'characters') {
+      loadAllCharacters();
+      if (chapters.length === 0) {
+        loadChapters();
+      }
+    }
+  }, [activeTab, loadAllCharacters, loadChapters, chapters.length]);
+
+  // Debounce character search
+  useEffect(() => {
+    if (activeTab !== 'characters') return;
+    const timer = setTimeout(() => {
+      setCharacterOffset(0);
+      loadAllCharacters();
+    }, 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characterSearchTerm, activeTab]);
+
+  const openCharacterEditor = (character: Character) => {
+    setEditingCharacter(character);
+    setCharacterFormData({
+      name: character.name,
+      aliases: character.aliases || [],
+      first_appearance_chapter_id: character.first_appearance_chapter_id,
+      notes: character.notes || '',
+    });
+    setNewAliasInput('');
+  };
+
+  const closeCharacterEditor = () => {
+    setEditingCharacter(null);
+    setCharacterFormData({ name: '', aliases: [], first_appearance_chapter_id: null, notes: '' });
+    setNewAliasInput('');
+  };
+
+  const addAlias = () => {
+    const trimmed = newAliasInput.trim();
+    if (trimmed && !characterFormData.aliases.includes(trimmed)) {
+      setCharacterFormData({
+        ...characterFormData,
+        aliases: [...characterFormData.aliases, trimmed],
+      });
+      setNewAliasInput('');
+    }
+  };
+
+  const removeAlias = (alias: string) => {
+    setCharacterFormData({
+      ...characterFormData,
+      aliases: characterFormData.aliases.filter((a) => a !== alias),
+    });
+  };
+
+  const saveCharacter = async () => {
+    if (!editingCharacter) return;
+
+    try {
+      const response = await fetch(`/api/characters/${editingCharacter.id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: characterFormData.name,
+          aliases: characterFormData.aliases,
+          first_appearance_chapter_id: characterFormData.first_appearance_chapter_id,
+          notes: characterFormData.notes || null,
+        }),
+      });
+
+      if (response.ok) {
+        alert('Character updated successfully');
+        closeCharacterEditor();
+        loadAllCharacters();
+        loadStats();
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error saving character:', err);
+      alert('Failed to save character');
+    }
+  };
+
+  const deleteCharacter = async (characterId: number, characterName: string) => {
+    if (!confirm(`Are you sure you want to delete "${characterName}"? This cannot be undone.`)) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`/api/characters/${characterId}`, {
+        method: 'DELETE',
+      });
+
+      if (response.ok) {
+        alert('Character deleted successfully');
+        closeCharacterEditor();
+        loadAllCharacters();
+        loadStats();
+      } else {
+        const error = await response.json();
+        if (error.details) {
+          alert(`Cannot delete: Character has ${error.details.classes} classes, ${error.details.abilities} abilities, and ${error.details.events} events linked.`);
+        } else {
+          alert(`Error: ${error.error}`);
+        }
+      }
+    } catch (err) {
+      console.error('Error deleting character:', err);
+      alert('Failed to delete character');
+    }
+  };
+
   const getEventTypeColor = (type: string) => {
     switch (type) {
       case 'class_obtained':
@@ -770,58 +943,87 @@ export default function AdminPage() {
           )}
         </div>
 
-        {/* Filters */}
-        <div className="mb-6 space-y-4">
-          {/* Status Filter */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Filter by Status</label>
-            <select
-              value={statusFilter}
-              onChange={(e) => {
-                setStatusFilter(e.target.value as any);
-                setOffset(0); // Reset to first page when changing filter
-              }}
-              className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        {/* Tab Navigation */}
+        <div className="mb-6 border-b border-gray-200">
+          <nav className="-mb-px flex space-x-8">
+            <button
+              onClick={() => setActiveTab('events')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'events'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
             >
-              <option value="unassigned">Unassigned (needs character assignment)</option>
-              <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
-              <option value="processed">Processed (live in database)</option>
-              <option value="archived">Archived (false positives)</option>
-              <option value="all">All Events</option>
-            </select>
-          </div>
-
-          {/* Search/Filter Events */}
-          <div>
-            <label className="block text-sm font-medium mb-2">Search Events</label>
-            <div className="relative">
-              <input
-                type="text"
-                value={eventFilter}
-                onChange={(e) => setEventFilter(e.target.value)}
-                placeholder="Filter by text, chapter, character, or type..."
-                className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
-              </div>
-              {eventFilter && (
-                <button
-                  onClick={() => setEventFilter('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              )}
-            </div>
-          </div>
+              Events
+            </button>
+            <button
+              onClick={() => setActiveTab('characters')}
+              className={`py-2 px-1 border-b-2 font-medium text-sm ${
+                activeTab === 'characters'
+                  ? 'border-blue-500 text-blue-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              }`}
+            >
+              Characters
+            </button>
+          </nav>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Events Tab Content */}
+        {activeTab === 'events' && (
+          <>
+            {/* Filters */}
+            <div className="mb-6 space-y-4">
+              {/* Status Filter */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Filter by Status</label>
+                <select
+                  value={statusFilter}
+                  onChange={(e) => {
+                    setStatusFilter(e.target.value as any);
+                    setOffset(0); // Reset to first page when changing filter
+                  }}
+                  className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="unassigned">Unassigned (needs character assignment)</option>
+                  <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
+                  <option value="processed">Processed (live in database)</option>
+                  <option value="archived">Archived (false positives)</option>
+                  <option value="all">All Events</option>
+                </select>
+              </div>
+
+              {/* Search/Filter Events */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Search Events</label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={eventFilter}
+                    onChange={(e) => setEventFilter(e.target.value)}
+                    placeholder="Filter by text, chapter, character, or type..."
+                    className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                    <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                    </svg>
+                  </div>
+                  {eventFilter && (
+                    <button
+                      onClick={() => setEventFilter('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Events List */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center justify-between mb-4">
@@ -1233,7 +1435,241 @@ export default function AdminPage() {
             ) : null}
           </div>
         </div>
+          </>
+        )}
+
+        {/* Characters Tab Content */}
+        {activeTab === 'characters' && (
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Character Management</h2>
+              <div className="text-sm text-gray-600">
+                {characterLoading ? 'Loading...' : `${allCharacters.length} characters`}
+              </div>
+            </div>
+
+            {/* Search */}
+            <div className="mb-4">
+              <div className="relative">
+                <input
+                  type="text"
+                  value={characterSearchTerm}
+                  onChange={(e) => setCharacterSearchTerm(e.target.value)}
+                  placeholder="Search characters by name..."
+                  className="w-full px-4 py-2 pl-10 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+                <div className="absolute left-3 top-1/2 -translate-y-1/2">
+                  <svg className="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                  </svg>
+                </div>
+                {characterSearchTerm && (
+                  <button
+                    onClick={() => setCharacterSearchTerm('')}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Pagination */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setCharacterOffset(Math.max(0, characterOffset - characterLimit))}
+                disabled={characterOffset === 0}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Previous
+              </button>
+              <button
+                onClick={() => setCharacterOffset(characterOffset + characterLimit)}
+                disabled={allCharacters.length < characterLimit}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Next
+              </button>
+            </div>
+
+            {/* Character List */}
+            <div className="space-y-2 max-h-[600px] overflow-y-auto">
+              {allCharacters.map((character) => (
+                <div
+                  key={character.id}
+                  className="border rounded-lg p-4 hover:border-gray-300 cursor-pointer transition"
+                  onClick={() => openCharacterEditor(character)}
+                >
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <div className="font-medium text-lg">{character.name}</div>
+                      {character.aliases && character.aliases.length > 0 && (
+                        <div className="text-sm text-gray-500 mt-1">
+                          Aliases: {character.aliases.join(', ')}
+                        </div>
+                      )}
+                      {character.notes && (
+                        <div className="text-sm text-gray-600 mt-1 line-clamp-2">
+                          {character.notes}
+                        </div>
+                      )}
+                    </div>
+                    <div className="text-xs text-gray-400">
+                      ID: {character.id}
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {allCharacters.length === 0 && !characterLoading && (
+                <p className="text-gray-500 text-center py-8">
+                  {characterSearchTerm ? 'No characters match your search' : 'No characters found'}
+                </p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
+
+      {/* Character Edit Modal */}
+      {editingCharacter && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-semibold">Edit Character</h2>
+              <button
+                onClick={closeCharacterEditor}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              {/* Name */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Name *</label>
+                <input
+                  type="text"
+                  value={characterFormData.name}
+                  onChange={(e) => setCharacterFormData({ ...characterFormData, name: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Aliases */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Aliases</label>
+                <div className="flex flex-wrap gap-2 mb-2">
+                  {characterFormData.aliases.map((alias, index) => (
+                    <span
+                      key={index}
+                      className="inline-flex items-center gap-1 px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-sm"
+                    >
+                      {alias}
+                      <button
+                        onClick={() => removeAlias(alias)}
+                        className="text-gray-500 hover:text-red-500"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </span>
+                  ))}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newAliasInput}
+                    onChange={(e) => setNewAliasInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        addAlias();
+                      }
+                    }}
+                    placeholder="Add alias..."
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  />
+                  <button
+                    onClick={addAlias}
+                    disabled={!newAliasInput.trim()}
+                    className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Add
+                  </button>
+                </div>
+              </div>
+
+              {/* First Appearance Chapter */}
+              <div>
+                <label className="block text-sm font-medium mb-2">First Appearance Chapter</label>
+                <select
+                  value={characterFormData.first_appearance_chapter_id || ''}
+                  onChange={(e) => setCharacterFormData({
+                    ...characterFormData,
+                    first_appearance_chapter_id: e.target.value ? parseInt(e.target.value) : null
+                  })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                >
+                  <option value="">Not set</option>
+                  {chapters.map((chapter) => (
+                    <option key={chapter.id} value={chapter.id}>
+                      {chapter.chapter_number}{chapter.title ? `: ${chapter.title}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="block text-sm font-medium mb-2">Notes</label>
+                <textarea
+                  value={characterFormData.notes}
+                  onChange={(e) => setCharacterFormData({ ...characterFormData, notes: e.target.value })}
+                  rows={4}
+                  placeholder="Add notes about this character..."
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                />
+              </div>
+
+              {/* Meta Info */}
+              <div className="text-xs text-gray-500 pt-2 border-t">
+                <p>Character ID: {editingCharacter.id}</p>
+                <p>Created: {new Date(editingCharacter.created_at).toLocaleString()}</p>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex gap-3 mt-6">
+              <button
+                onClick={saveCharacter}
+                disabled={!characterFormData.name.trim()}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                Save Changes
+              </button>
+              <button
+                onClick={() => deleteCharacter(editingCharacter.id, editingCharacter.name)}
+                className="px-4 py-2 bg-red-100 text-red-700 rounded-md hover:bg-red-200"
+              >
+                Delete
+              </button>
+              <button
+                onClick={closeCharacterEditor}
+                className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Classification Modal */}
       {classifyingEvent && (
