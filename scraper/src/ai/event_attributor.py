@@ -228,6 +228,7 @@ For each event:
 
             confidence = attr.get('confidence', 0.5)
             character_name = attr.get('character_name')
+            event_type = attr.get('event_type', 'other')
 
             # Look up character ID
             character_id = None
@@ -235,12 +236,18 @@ For each event:
                 character_id = self.character_extractor.get_character_id(character_name)
 
             # Determine acceptance/review status
-            auto_accepted = confidence >= AUTO_ACCEPT_THRESHOLD
-            needs_review = confidence < AUTO_ACCEPT_THRESHOLD
+            # False positives always need review - even if AI is confident,
+            # a human should verify before discarding potential real events
+            if event_type == 'false_positive':
+                auto_accepted = False
+                needs_review = True
+            else:
+                auto_accepted = confidence >= AUTO_ACCEPT_THRESHOLD
+                needs_review = confidence < AUTO_ACCEPT_THRESHOLD
 
             attributions.append(EventAttribution(
                 event_id=event_id,
-                event_type=attr.get('event_type', 'other'),
+                event_type=event_type,
                 character_name=character_name,
                 character_id=character_id,
                 parsed_data=attr.get('parsed_data', {}),
