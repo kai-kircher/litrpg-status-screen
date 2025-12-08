@@ -1,0 +1,61 @@
+# Fake and Imaginary Skills from The Wandering Inn Wiki
+# Source: https://wiki.wanderinginn.com/Skills#Fake_and_Imaginary_Skills
+# Last updated: [DATE]
+#
+# These are joke/imaginary skills that appear in the text but are NOT real
+# System skills. Events containing these should be marked as false_positive.
+#
+# Format: One skill name per line (without brackets)
+# Lines starting with # are comments
+#
+# TODO: Copy the skill names from the wiki's "Fake and Imaginary Skills" table
+
+Advanced Flirting
+Ankle-blasting Kick
+Aura of Stress
+Aura of the Bird
+Aura Pizza
+Aura Sword
+Automated Scarecrows
+Awaken Scarecrows
+Bad Fruit Detector
+Blade of Calanfer
+Can't Be Late for Work
+Cloudburst Theft
+Convert Death Mana
+Flurry of Mean Strikes
+Food Dangersense
+Greatest Teleport
+Pride is Heat
+I Breathe in Air
+Immunity: Social Awkwardness
+Inn: Extended Rooms
+Inn: Stretched Corridors
+Inn: Unlimited Mana Pool
+Invisible Appearing Rock
+Kamehameha Punch
+Kiss of Love
+Like Fire, Infidelity
+Like Fire, Love
+Like Fire, Romance
+Like Flame, Blowtorch
+Line-Ender Hot
+Mini-Minotaur Punch
+Outrun the Law
+Perfect Sneer
+Posterior Damage
+Realization of Your Deepest Dream
+Relc Feint
+Relc Headbutt
+Relc Hug
+Relc Kick
+Relc Punch
+Relc Sense
+Super Jump
+Super Teleport
+Tail Attack
+Tail Stab
+Thou Shalt Not Pass
+Total Immunity: Shame
+Transfer Mana (Ward)
+Wall of Femininity

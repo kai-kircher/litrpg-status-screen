@@ -63,6 +63,26 @@ python -m src.main ai-stats                          # Show AI usage statistics
 python -m src.main review-queue                      # Show events needing review
 ```
 
+**Wiki Reference Data Commands**:
+```bash
+python -m src.main scrape-wiki                       # Scrape all wiki data (characters, skills, spells, classes)
+python -m src.main scrape-wiki -e characters         # Scrape only characters
+python -m src.main scrape-wiki -e skills             # Scrape only skills
+python -m src.main scrape-wiki -e spells             # Scrape only spells
+python -m src.main scrape-wiki -e classes            # Scrape only classes
+python -m src.main wiki-stats                        # Show wiki reference data statistics
+python -m src.main wiki-search "Erin"                # Search wiki data
+python -m src.main wiki-search "Fireball" -t spells  # Search only spells
+```
+
+**Manually Maintained Data Files** (in `scraper/data/`):
+- `fake_skills.txt` - Fake/imaginary skills from wiki (auto-reject as false positives)
+- `colored_skills.txt` - Colored/newly created skills from wiki
+- `fake_classes.txt` - Hypothetical/fake classes from wiki (auto-reject as false positives)
+
+These files are manually copied from the wiki since those sections are small and rarely change.
+Update them by copying skill/class names (without brackets) from the wiki tables.
+
 ## Docker Compose Profiles
 
 ```bash
@@ -91,6 +111,13 @@ docker-compose --profile tools up -d    # Includes pgAdmin at :5050
 - `character_abilities` - Character ability acquisitions
 - `ai_chapter_state` - Tracks AI processing progress per chapter
 
+**Wiki Reference Tables** (canonical data from wiki.wanderinginn.com):
+- `wiki_characters` - All 1600+ wiki characters with aliases, species
+- `wiki_skills` - Skills list including fake/imaginary skills for filtering
+- `wiki_spells` - Spells list with tier information
+- `wiki_classes` - Classes list including fake/hypothetical classes
+- `wiki_scrape_state` - Tracks wiki scraping progress
+
 ## API Routes
 
 - `GET /api/characters` - All characters
@@ -108,8 +135,16 @@ docker-compose --profile tools up -d    # Includes pgAdmin at :5050
 **Event Pipeline**:
 1. Scraper extracts all `[bracketed text]` from chapters as raw events
 2. AI processing (or manual admin UI) attributes events to characters
-3. Events with confidence >= 0.93 are auto-accepted; lower confidence flagged for review
-4. Processed events become character progression data
+3. AI uses wiki reference data to validate skills/spells/classes and detect fakes
+4. Events with confidence >= 0.93 are auto-accepted; lower confidence flagged for review
+5. Processed events become character progression data
+
+**Wiki Integration**: The AI processing uses wiki data as a source of truth:
+- 1600+ characters with canonical names and aliases
+- Skills list including "Fake and Imaginary Skills" for filtering false positives
+- Spells list with tier information
+- Classes list including "Hypothetical and Fake Classes"
+- AI matches characters/abilities against wiki before accepting events
 
 **Rate Limiting**: 10-second delay between requests (per robots.txt). Initial scrape of thousands of chapters takes days.
 

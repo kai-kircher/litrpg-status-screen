@@ -13,18 +13,26 @@ Context about The Wandering Inn:
 - Characters can have multiple classes and gain skills/spells when leveling up
 - Main races include Humans, Drakes (lizard-folk), Gnolls (hyena-folk), Antinium (ant-people), Goblins, and many others
 
-When identifying characters:
+IMPORTANT: You will be provided with a list of KNOWN CHARACTERS from the wiki. When identifying characters:
+- ALWAYS match to known wiki characters when possible (use the exact name from the wiki)
+- Wiki characters include their aliases - use the canonical wiki name, not the alias
+- Only mark a character as "new" if they are NOT in the provided wiki character list
 - Focus on named characters (proper nouns)
 - Include full names when known (e.g., "Erin Solstice" not just "Erin")
 - Note any aliases or nicknames used in the text
 - For new characters, extract species if mentioned and any distinguishing traits
 - Ignore generic references like "the guard" unless it's clearly a named character
 
+When matching to wiki characters:
+- Check if the name matches any wiki character name OR their aliases
+- Wiki data includes species info - use it to verify identification
+- If you're unsure if a name matches a wiki character, include it with lower confidence
+
 You MUST respond with valid JSON in this exact format:
 {
     "characters_mentioned": [
         {
-            "name": "Full Character Name",
+            "name": "Full Character Name (use wiki canonical name)",
             "confidence": 0.95,
             "alias_used": "nickname if different from name, or null"
         }
@@ -52,6 +60,7 @@ Your task is to:
 1. Classify bracket events by type (class obtained, level up, skill obtained, etc.)
 2. Attribute events to specific characters based on surrounding context
 3. Extract structured data from each event
+4. Validate events against wiki data when provided
 
 Event Types:
 - class_obtained: "[Innkeeper class obtained!]", "[Warrior Level 1!]" (first level = class obtained)
@@ -74,6 +83,22 @@ Event Types:
   - Sarcastic or humorous bracket text that mimics the System but isn't real
   - References to fictional items, abilities, or classes that don't exist in the story's System
   - Characters roleplaying or pretending to get skills/classes
+  - IMPORTANT: Skills/classes marked as "FAKE" in the wiki data are imaginary/joke abilities
+
+WIKI VALIDATION:
+You will be provided with wiki reference data containing:
+- Known characters (with species and aliases)
+- Known skills (including which ones are FAKE/imaginary)
+- Known spells (with tier information)
+- Known classes (including which ones are FAKE/hypothetical)
+
+Use this wiki data to:
+1. Validate that skills/spells/classes exist in the story's System
+2. Identify fake/imaginary abilities that should be marked as false_positive
+3. Match character names to their canonical wiki names
+4. Cross-reference character species when attributing events
+
+If a skill/class is marked as FAKE in the wiki data, classify the event as "false_positive" with high confidence.
 
 Chapter Number Suffixes (POV indicators):
 The chapter number (e.g., "1.52 R") often includes a letter suffix indicating the POV character(s). Use this as a prior for attribution:
@@ -102,6 +127,7 @@ Attribution Guidelines:
 - If multiple characters are present, look for specific cues
 - Watch for humorous/sarcastic tone that indicates a fake event (laughter, jokes, mockery)
 - Real System events are typically serious moments; joke brackets often have comedic context
+- Use wiki character data to verify species/aliases match the context
 
 You MUST respond with valid JSON in this exact format:
 {
@@ -115,7 +141,8 @@ You MUST respond with valid JSON in this exact format:
                 "class_name": "Related Class if known"
             },
             "confidence": 0.95,
-            "reasoning": "Brief explanation of why this attribution was made"
+            "reasoning": "Brief explanation of why this attribution was made",
+            "wiki_validated": true
         }
     ]
 }

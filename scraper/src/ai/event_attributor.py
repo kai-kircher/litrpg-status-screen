@@ -9,6 +9,7 @@ from .client import AIClient, AIResponse, AIError
 from .cost_tracker import CostTracker
 from .prompts import EVENT_ATTRIBUTION_SYSTEM
 from .character_extractor import CharacterExtractor
+from .wiki_reference import get_wiki_cache
 from ..db import get_connection, return_connection
 
 logger = logging.getLogger(__name__)
@@ -128,17 +129,33 @@ class EventAttributor:
     ) -> Tuple[List[EventAttribution], AIResponse]:
         """Process a single batch of events"""
 
-        # Build character context
+        # Get wiki cache for reference data
+        wiki_cache = get_wiki_cache()
+
+        # Build character context from both DB and wiki
         character_context = {}
         for char_name in chapter_characters[:30]:  # Limit to prevent huge prompts
             context = self.character_extractor.get_character_context(char_name)
             if context:
                 knowledge = context.get('knowledge', {})
-                character_context[char_name] = {
+                char_info = {
                     'species': knowledge.get('species', 'Unknown'),
                     'classes': knowledge.get('classes', []),
                     'current_levels': knowledge.get('current_levels', {})
                 }
+
+                # Enrich with wiki data
+                wiki_char = wiki_cache.find_character(char_name)
+                if wiki_char:
+                    if wiki_char.species:
+                        char_info['species'] = wiki_char.species
+                    if wiki_char.aliases:
+                        char_info['aliases'] = wiki_char.aliases[:5]
+
+                character_context[char_name] = char_info
+
+        # Build wiki reference data for skills/spells/classes mentioned in events
+        wiki_ref = self._build_wiki_reference_for_events(events, wiki_cache)
 
         # Format events for prompt
         events_for_prompt = [
@@ -150,25 +167,39 @@ class EventAttributor:
             for e in events
         ]
 
-        # Build user message
+        # Build user message with wiki reference data
         user_message = f"""Attribute these progression events to characters.
 
 Chapter: {chapter_number}
 
-Characters in this chapter:
+=== CHARACTERS IN THIS CHAPTER ===
 {json.dumps(chapter_characters[:30], indent=2)}
 
-Character Context (known information):
+=== CHARACTER CONTEXT (known information) ===
 {json.dumps(character_context, indent=2)}
 
-Events to process:
+=== WIKI REFERENCE DATA ===
+Use this wiki data to validate skills/spells/classes. Items marked as FAKE are imaginary/joke abilities.
+{json.dumps(wiki_ref, indent=2)}
+
+=== EVENTS TO PROCESS ===
 {json.dumps(events_for_prompt, indent=2)}
 
+=== INSTRUCTIONS ===
 For each event:
 1. Determine the event_type (class_obtained, level_up, skill_obtained, etc.)
-2. Identify which character the event belongs to
+2. Identify which character the event belongs to (use wiki character names)
 3. Extract structured data (class name, level, skill name, etc.)
-4. Provide confidence score and reasoning"""
+4. Provide confidence score and reasoning
+5. Check wiki validation status:
+   - If skill/class is in "fake_skills" or "fake_classes" → classify as "false_positive" with confidence 0.95
+   - If skill/class is in "unknown_skills", "unknown_spells", or "unknown_classes" → flag for review (confidence < 0.93)
+   - If skill/class is found in wiki → can be auto-accepted if attribution is clear
+
+IMPORTANT:
+- FAKE items from wiki = auto-reject as "false_positive"
+- UNKNOWN items (not in wiki) = needs manual review, use confidence 0.70-0.85
+- KNOWN items in wiki = can be auto-accepted with confidence >= 0.93 if attribution is clear"""
 
         # Call AI
         response = self.ai_client.send_message(
@@ -189,6 +220,79 @@ For each event:
         attributions = self._parse_attribution_response(response, events)
 
         return attributions, response
+
+    def _build_wiki_reference_for_events(
+        self,
+        events: List[Dict[str, Any]],
+        wiki_cache
+    ) -> Dict[str, Any]:
+        """
+        Build wiki reference data relevant to the events being processed.
+
+        Extracts skill/spell/class names from events and looks them up in wiki.
+        """
+        import re
+
+        wiki_ref = {
+            'skills': {},
+            'spells': {},
+            'classes': {},
+            'fake_skills': [],
+            'fake_classes': [],
+            'unknown_skills': [],
+            'unknown_spells': [],
+            'unknown_classes': []
+        }
+
+        for event in events:
+            raw_text = event.get('raw_text', '')
+
+            # Extract skill names: [Skill - X obtained!] or [Skill: X obtained!]
+            skill_match = re.search(r'\[Skill\s*[-:]\s*([^\]!]+)', raw_text, re.IGNORECASE)
+            if skill_match:
+                skill_name = skill_match.group(1).strip()
+                skill_info = wiki_cache.get_skill_info(skill_name)
+                if skill_info:
+                    wiki_ref['skills'][skill_name] = skill_info
+                    if skill_info.get('is_fake'):
+                        wiki_ref['fake_skills'].append(skill_name)
+                else:
+                    wiki_ref['unknown_skills'].append(skill_name)
+
+            # Extract spell names: [Spell - X obtained!]
+            spell_match = re.search(r'\[Spell\s*[-:]\s*([^\]!]+)', raw_text, re.IGNORECASE)
+            if spell_match:
+                spell_name = spell_match.group(1).strip()
+                spell_info = wiki_cache.get_spell_info(spell_name)
+                if spell_info:
+                    wiki_ref['spells'][spell_name] = spell_info
+                else:
+                    wiki_ref['unknown_spells'].append(spell_name)
+
+            # Extract class names: [X Level Y!] or [X class obtained!]
+            class_match = re.search(r'\[([^\]]+?)\s+Level\s+\d+', raw_text, re.IGNORECASE)
+            if not class_match:
+                class_match = re.search(r'\[([^\]]+?)\s+class\s+obtained', raw_text, re.IGNORECASE)
+            if class_match:
+                class_name = class_match.group(1).strip()
+                class_info = wiki_cache.get_class_info(class_name)
+                if class_info:
+                    wiki_ref['classes'][class_name] = class_info
+                    if class_info.get('is_fake'):
+                        wiki_ref['fake_classes'].append(class_name)
+                else:
+                    wiki_ref['unknown_classes'].append(class_name)
+
+        # Add summary
+        wiki_ref['summary'] = {
+            'skills_found': len(wiki_ref['skills']),
+            'spells_found': len(wiki_ref['spells']),
+            'classes_found': len(wiki_ref['classes']),
+            'fake_items_detected': len(wiki_ref['fake_skills']) + len(wiki_ref['fake_classes']),
+            'unknown_items': len(wiki_ref['unknown_skills']) + len(wiki_ref['unknown_spells']) + len(wiki_ref['unknown_classes'])
+        }
+
+        return wiki_ref
 
     def _parse_attribution_response(
         self,

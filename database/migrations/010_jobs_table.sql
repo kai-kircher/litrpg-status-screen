@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS jobs (
         status IN ('pending', 'running', 'completed', 'failed', 'cancelled')
     ),
     CONSTRAINT jobs_type_check CHECK (
-        job_type IN ('scrape', 'process-ai', 'build-toc', 'extract-characters', 'attribute-events')
+        job_type IN ('scrape', 'process-ai', 'build-toc', 'extract-characters', 'attribute-events', 'scrape-wiki')
     )
 );
 

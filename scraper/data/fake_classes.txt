@@ -1,0 +1,125 @@
+# Hypothetical and Fake Classes from The Wandering Inn Wiki
+# Source: https://wiki.wanderinginn.com/List_of_Classes#Hypothetical_and_Fake_Classes
+# Last updated: [DATE]
+#
+# These are joke/hypothetical classes that are mentioned but are NOT real
+# System classes. Events containing these should be marked as false_positive.
+#
+# Format: One class name per line (without brackets)
+# Lines starting with # are comments
+#
+# TODO: Copy the class names from the wiki's "Hypothetical and Fake Classes" table
+
+Antinium Princess
+Arachnologist
+Armchair General
+Arms Manufacturer
+Auto Repair Mechanic
+Awesome Innkeeper
+Badass
+Baron of the Trees
+Beastraider Leader
+Biologist
+Blood Healer
+Boiler
+Bug Exterminator
+Champion of the Foos
+Chatterbox
+Chemist
+Chieftain of the Kitchen
+Choreographer
+Climbing Pervert
+Conqueror
+Cowboy Knight
+Cultivation Expert
+Damsel
+Dark Avenger
+Data Analyst
+Depression Spreader
+Doomseeker
+Egg Bounty Hunter
+Emotional Innkeeper
+Firefighter
+Football Coach
+Footballer
+Fur Knight
+Goblin Shaman
+Good Person
+Gouda General
+Grandmaster
+Gynecolomancer
+Hammer Performer
+Heckler
+Helpful Servant
+Hero Chieftain
+Honor Warrior
+Honorable Thief
+Honorbound Minotaur-Headed Duelist
+Honored Shieldbearer
+Hugfriend Commander of the Nice People
+Ice Queen
+Inn Manager
+Innkeeper of Slaughter
+Kaiser
+Kickboxer
+Kidnapper
+Lieutenant of Cheddar
+Lieutenant of Cheese
+Lieutenant of the Brie Line
+Lightningstrike Commander
+Linguist
+Loomer
+Loremaster
+Macaroni Critic
+Magearmor Soldiers
+Magical Girl
+Mahatma
+Mammalogist
+Mechanist
+Metallurgist
+Mobile Mechanic
+Moral Philospher
+Mozarella Major
+Mrsha Expert
+Ninja
+Onion Ninja
+Pacifist
+Paragon of Virtue
+Party Pooper
+Partycrasher
+Pizza Knight
+Players
+Preacher
+President
+Princess of Dawn
+Princess of Depression
+Princess of Trousers
+Reaper
+Rodent Bard
+Sarcasm Bard
+Savant
+Sculler
+Senior Commander of Military Forces
+Sex Guru
+Shadow General
+Showoff
+Sketch Wizard
+Slacker
+Sneak Thief
+Sniper Hag
+Soccer Player
+Spider Druid
+Statistican
+Stealth Bard
+Submarine Captain
+Super Assasin
+Superhero
+Sword Fire Slaying Spirit Rockstar
+Technomage
+Thought Thief
+Tour Guide
+Tourist
+Walker
+Witch General
+Witcher
+Wyrm of No Good Humor

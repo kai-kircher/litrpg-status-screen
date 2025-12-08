@@ -842,5 +842,255 @@ def review_queue(limit):
         sys.exit(1)
 
 
+# ============================================================================
+# WIKI SCRAPING COMMANDS
+# ============================================================================
+
+@cli.command('scrape-wiki')
+@click.option('--entity', '-e', type=click.Choice(['characters', 'skills', 'spells', 'classes', 'all']),
+              default='all', help='Entity type to scrape')
+@click.option('--delay', '-d', type=float, help='Delay between requests in seconds')
+def scrape_wiki(entity, delay):
+    """Scrape reference data from The Wandering Inn Wiki"""
+    from .scrapers import WikiCharacterScraper, WikiSkillScraper, WikiSpellScraper, WikiClassScraper
+    from .db import (
+        init_pool,
+        save_wiki_characters_batch,
+        save_wiki_skills_batch,
+        save_wiki_spells_batch,
+        save_wiki_classes_batch,
+        update_wiki_scrape_state,
+    )
+
+    try:
+        init_pool()
+
+        stats = {
+            'characters': 0,
+            'skills': 0,
+            'spells': 0,
+            'classes': 0,
+        }
+
+        # Scrape characters
+        if entity in ['characters', 'all']:
+            logging.info("Scraping wiki characters...")
+            scraper = WikiCharacterScraper(delay=delay)
+            try:
+                characters = scraper.fetch_all_characters()
+                if characters:
+                    count = save_wiki_characters_batch(characters)
+                    stats['characters'] = count
+                    update_wiki_scrape_state('characters', count)
+                    logging.info(f"Saved {count} wiki characters")
+            finally:
+                scraper.close()
+
+        # Scrape skills
+        if entity in ['skills', 'all']:
+            logging.info("Scraping wiki skills...")
+            scraper = WikiSkillScraper(delay=delay)
+            try:
+                skills = scraper.fetch_all_skills()
+                if skills:
+                    count = save_wiki_skills_batch(skills)
+                    stats['skills'] = count
+                    update_wiki_scrape_state('skills', count)
+                    logging.info(f"Saved {count} wiki skills")
+            finally:
+                scraper.close()
+
+        # Scrape spells
+        if entity in ['spells', 'all']:
+            logging.info("Scraping wiki spells...")
+            scraper = WikiSpellScraper(delay=delay)
+            try:
+                spells = scraper.fetch_all_spells()
+                if spells:
+                    count = save_wiki_spells_batch(spells)
+                    stats['spells'] = count
+                    update_wiki_scrape_state('spells', count)
+                    logging.info(f"Saved {count} wiki spells")
+            finally:
+                scraper.close()
+
+        # Scrape classes
+        if entity in ['classes', 'all']:
+            logging.info("Scraping wiki classes...")
+            scraper = WikiClassScraper(delay=delay)
+            try:
+                classes = scraper.fetch_all_classes()
+                if classes:
+                    count = save_wiki_classes_batch(classes)
+                    stats['classes'] = count
+                    update_wiki_scrape_state('classes', count)
+                    logging.info(f"Saved {count} wiki classes")
+            finally:
+                scraper.close()
+
+        # Show summary
+        click.echo("\n" + "=" * 60)
+        click.echo("Wiki Scrape Summary")
+        click.echo("=" * 60)
+        if stats['characters']:
+            click.echo(f"Characters: {stats['characters']}")
+        if stats['skills']:
+            click.echo(f"Skills: {stats['skills']}")
+        if stats['spells']:
+            click.echo(f"Spells: {stats['spells']}")
+        if stats['classes']:
+            click.echo(f"Classes: {stats['classes']}")
+        click.echo("=" * 60)
+
+    except Exception as e:
+        logging.error(f"Wiki scraping failed: {e}")
+        sys.exit(1)
+
+
+@cli.command('wiki-stats')
+def wiki_stats():
+    """Show wiki reference data statistics"""
+    from .db import (
+        init_pool,
+        get_wiki_character_count,
+        get_wiki_skill_count,
+        get_wiki_spell_count,
+        get_wiki_class_count,
+        get_all_wiki_scrape_states,
+    )
+
+    try:
+        init_pool()
+
+        click.echo("\n" + "=" * 60)
+        click.echo("Wiki Reference Data Statistics")
+        click.echo("=" * 60)
+
+        # Get counts
+        char_count = get_wiki_character_count()
+        skill_count = get_wiki_skill_count()
+        spell_count = get_wiki_spell_count()
+        class_count = get_wiki_class_count()
+
+        click.echo(f"Characters: {char_count}")
+        click.echo(f"Skills: {skill_count}")
+        click.echo(f"Spells: {spell_count}")
+        click.echo(f"Classes: {class_count}")
+
+        # Get scrape states
+        states = get_all_wiki_scrape_states()
+        if states:
+            click.echo("\nLast Scraped:")
+            for state in states:
+                last_scraped = state['last_scraped_at']
+                if last_scraped:
+                    click.echo(f"  {state['entity_type']}: {last_scraped.strftime('%Y-%m-%d %H:%M:%S')}")
+
+        click.echo("=" * 60)
+
+        if char_count == 0 and skill_count == 0:
+            click.echo("\nNo wiki data found. Run 'python -m src.main scrape-wiki' to populate.")
+
+    except Exception as e:
+        logging.error(f"Failed to get wiki stats: {e}")
+        sys.exit(1)
+
+
+@cli.command('wiki-search')
+@click.argument('query')
+@click.option('--type', '-t', 'entity_type', type=click.Choice(['characters', 'skills', 'spells', 'classes']),
+              help='Limit search to specific entity type')
+def wiki_search(query, entity_type):
+    """Search wiki reference data"""
+    from .db import (
+        init_pool,
+        get_connection,
+        return_connection,
+    )
+
+    try:
+        init_pool()
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        query_pattern = f'%{query}%'
+        results = []
+
+        # Search characters
+        if not entity_type or entity_type == 'characters':
+            cursor.execute(
+                """
+                SELECT 'character' as type, name, wiki_url
+                FROM wiki_characters
+                WHERE name ILIKE %s OR %s = ANY(aliases)
+                LIMIT 10
+                """,
+                (query_pattern, query)
+            )
+            results.extend(cursor.fetchall())
+
+        # Search skills
+        if not entity_type or entity_type == 'skills':
+            cursor.execute(
+                """
+                SELECT 'skill' as type, name,
+                    CASE WHEN is_fake THEN 'FAKE' ELSE effect END as info
+                FROM wiki_skills
+                WHERE name ILIKE %s OR normalized_name ILIKE %s
+                LIMIT 10
+                """,
+                (query_pattern, query_pattern)
+            )
+            results.extend(cursor.fetchall())
+
+        # Search spells
+        if not entity_type or entity_type == 'spells':
+            cursor.execute(
+                """
+                SELECT 'spell' as type, name,
+                    CASE WHEN tier IS NOT NULL THEN 'Tier ' || tier ELSE 'Untiered' END as info
+                FROM wiki_spells
+                WHERE name ILIKE %s OR normalized_name ILIKE %s
+                LIMIT 10
+                """,
+                (query_pattern, query_pattern)
+            )
+            results.extend(cursor.fetchall())
+
+        # Search classes
+        if not entity_type or entity_type == 'classes':
+            cursor.execute(
+                """
+                SELECT 'class' as type, name,
+                    CASE WHEN is_fake THEN 'FAKE' ELSE description END as info
+                FROM wiki_classes
+                WHERE name ILIKE %s OR normalized_name ILIKE %s
+                LIMIT 10
+                """,
+                (query_pattern, query_pattern)
+            )
+            results.extend(cursor.fetchall())
+
+        cursor.close()
+        return_connection(conn)
+
+        if not results:
+            click.echo(f"No results found for '{query}'")
+            return
+
+        click.echo(f"\nSearch results for '{query}':")
+        click.echo("-" * 60)
+
+        for entity_type, name, info in results:
+            info_preview = (info[:50] + '...') if info and len(info) > 50 else (info or '')
+            click.echo(f"[{entity_type:10}] {name}")
+            if info_preview:
+                click.echo(f"             {info_preview}")
+
+    except Exception as e:
+        logging.error(f"Wiki search failed: {e}")
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     cli()

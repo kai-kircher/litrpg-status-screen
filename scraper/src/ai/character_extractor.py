@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from .client import AIClient, AIResponse, AIError
 from .cost_tracker import CostTracker
 from .prompts import CHARACTER_EXTRACTION_SYSTEM
+from .wiki_reference import get_wiki_cache
 from ..db import get_connection, return_connection
 
 logger = logging.getLogger(__name__)
@@ -124,29 +125,47 @@ class CharacterExtractor:
             text_to_analyze = chapter_text[:self.MAX_TEXT_LENGTH]
 
         # Build list of known characters for the prompt
-        known_characters = list(set(c['name'] for c in self._character_cache.values()))
+        # First, get wiki characters (canonical source)
+        wiki_cache = get_wiki_cache()
+        wiki_characters = wiki_cache.get_all_character_names()
+
+        # Also include characters from our database (may have characters not yet in wiki)
+        db_characters = list(set(c['name'] for c in self._character_cache.values()))
         known_aliases = {
             c['name']: c['aliases']
             for c in self._character_cache.values()
             if c['aliases']
         }
 
+        # Combine, preferring wiki names
+        all_known_characters = list(set(wiki_characters + db_characters))
+
+        # Build wiki character context with species info
+        wiki_context = wiki_cache.get_character_context_for_prompt(wiki_characters[:100])
+
         # Build user message
         user_message = f"""Analyze this chapter and identify all characters mentioned.
 
 Chapter Number: {chapter_number}
 
-Known Characters (use these exact names if mentioned):
-{json.dumps(known_characters[:200], indent=2)}
+=== WIKI CHARACTERS (authoritative source - use these exact names) ===
+The wiki has {len(wiki_characters)} known characters. Here are some with details:
+{wiki_context}
 
-Known Aliases:
+Full list of known character names:
+{json.dumps(all_known_characters[:300], indent=2)}
+
+Known Aliases (alternative names for characters):
 {json.dumps(known_aliases, indent=2) if len(known_aliases) < 50 else "(many aliases, use best judgment)"}
 
-Chapter Text:
+=== CHAPTER TEXT ===
 {text_to_analyze}
 
-Identify all characters mentioned in this chapter, matching to known characters where possible.
-For new characters not in the known list, provide their details."""
+=== INSTRUCTIONS ===
+Identify all characters mentioned in this chapter.
+- Match to wiki characters whenever possible (use exact wiki name)
+- Only mark as "new" if character is NOT in the wiki or database lists
+- For new characters, provide species and description"""
 
         # Call AI
         try:

@@ -1,0 +1,107 @@
+# Colored and Newly Created Skills from The Wandering Inn Wiki
+# Source: https://wiki.wanderinginn.com/Skills#List_of_Colored_and_Newly_Created_Skills
+# Last updated: [DATE]
+#
+# These are special "colored" skills (green, orange, golden, red, blue, purple)
+# that represent unique or newly created abilities.
+#
+# Format: One skill name per line (without brackets)
+# Lines starting with # are comments
+#
+# TODO: Copy the skill names from the wiki's "Colored and Newly Created Skills" table
+
+Aspect of the Wandering Inn
+Berr's Stare
+Berserker’s Rage
+Blade of Hatred		
+Blinding Insight of the Madman
+Cut of Mirrors
+Dawn Rises in Hell
+Deadman's Trigger
+Death Before Dishonor
+Deep Breath
+Defenders of the Inn (Shamblers)
+Divine Intuition (Weak)
+Dodge Roll (Aileron)
+Don't Mind the Box
+Doubled Agony
+Extended Battery
+Fame – Remember My Name
+Famous Name: (Name)
+Final Run
+For So Long As I Stand Evil Shall Quail
+I Found My Path to the Promised Land
+I See Only Destruction
+I Walked Under Heaven’s Sky
+I'm (Probably) Allowed in Here
+Immortal Moment
+Induction: Royal Bodyguard
+Inflict Curse: Self
+Influct Stored Pain
+Inn: The World’s Eye Theatre
+Intimidation: Spear of a Thousand Graves
+Jetfire Jump
+Legacy: Find the Dragon's Grave
+Legacy Whispers: Heartflame Set
+Levy the Satrapy (Birds)
+Lifeshard Ammunition
+Local Landmark: (Place)
+Mortal Enemy: Visions of Suffering	
+Mutual Condition: Barbarous Loyalty
+Mutual Condition: Depraved Intellect
+My Life, be Thou My Fire
+My Death: Corpse Explosion		
+Open the Vaults
+Open the Vaults: The Gemstone Giant’s Halberd of Khelt
+Other Me's Skill
+Perceive Noble Gases
+Phantom Gears
+Pinpoint Distance Kick
+Rage of Insanity
+Raythrust of Light
+Recaptured Sublimity
+Reputation – Ship: Friend of the Liminal Folk		
+Reputation: Infamy, Now My Fame
+Reputation: My Famous Name
+Reputation: Unpredictable Uncertainty
+Retribution: A Blow for a Blow
+Revine’s Jet
+Rocket Kick
+Royal Robbery: Birds
+Royal Transaction: Instantaneous Delivery, Instantaneous Reward
+Servant: Moment of Will
+Share My End
+Shared Authority: (Place)
+Sharpwit Drinker
+She Flies on Another World’s Wings (5 Seconds)		
+Ship: Kayak Roll
+Sin of Gluttony: The Might of Feasts
+Sin of Greed: Golden Momentum
+Squad: The Chess Club’s Stand
+Summon Aberration
+Summon: The Pink Carriage of Magnolia Reinhart
+Supreme General of the Cities: Shut Up And Follow My Orders
+Sword Art: Goblin’s Smile
+Sword Art: The Curve of the World		
+Sword Art: The Floodplains Vanished
+Sword of the Agelum
+Synergy Skill: Innkeeper – Lease Lesser Room
+Tell Me What You Truly Believe
+The Door to Earth
+The Inn That Walked
+The Laughing Folk Bowed to None; Neither Shall I
+The Light Be Blessing Upon Us All
+The Transient, Ephemeral, Fleeting Vault of the Mortal World. The Evanescent Safe of Passing Moments, the Faded Chest of Then and Them. The Box of Incontinuity
+The World of You and Me
+They Feared My Name
+They Walk With Me
+Time of the Olympian
+Tongue of Deikat Vunn
+Torreb’s Step		
+Undying Loyalty
+Way of the Elements: Current of the Sea		
+Way of the Elements: Fury of Skies		
+Way of the Elements: Path of the Land		
+Wings of Escieda
+Wondrous Fare
+Your Wounds Shall Close

@@ -24,6 +24,10 @@ class Config:
     START_CHAPTER: int = int(os.getenv("START_CHAPTER", "1"))
     MAX_CHAPTERS: int = int(os.getenv("MAX_CHAPTERS", "0"))
 
+    # Wiki scraper configuration (wiki has no crawl-delay in robots.txt)
+    WIKI_BASE_URL: str = os.getenv("WIKI_BASE_URL", "https://wiki.wanderinginn.com")
+    WIKI_REQUEST_DELAY: float = float(os.getenv("WIKI_REQUEST_DELAY", "1"))  # 1 second - be polite but faster
+
     # User agent for requests
     USER_AGENT: str = (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
