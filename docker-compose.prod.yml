@@ -45,6 +45,8 @@ services:
     volumes:
       # Mount Docker socket for spawning scraper containers
       - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount compose file so web can spawn scraper jobs
+      - ./docker-compose.prod.yml:/app/docker-compose.prod.yml:ro
     depends_on:
       postgres:
         condition: service_healthy

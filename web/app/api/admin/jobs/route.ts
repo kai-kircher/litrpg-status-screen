@@ -287,8 +287,8 @@ function buildAttributeEventsCommand(config: any): string {
 function buildDockerCommand(scraperCommand: string): string {
   // Run the scraper command in a new Docker container
   // Using docker-compose run to inherit environment and network settings
-  const appPath = process.env.APP_PATH || '/home/ubuntu/litrpg-status-screen';
-  return `docker compose -f ${appPath}/docker-compose.prod.yml run --rm scraper ${scraperCommand}`;
+  // The compose file is mounted into the container at /app/docker-compose.prod.yml
+  return `docker compose -f /app/docker-compose.prod.yml run --rm scraper ${scraperCommand}`;
 }
 
 async function updateJobProgress(jobId: number, output: string): Promise<void> {
