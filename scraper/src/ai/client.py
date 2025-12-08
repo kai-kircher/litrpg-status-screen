@@ -31,16 +31,16 @@ class AIResponse:
 
 # Model pricing per 1M tokens (as of Dec 2024)
 MODEL_PRICING = {
+    'claude-opus-4-5-20251101': {'input': 5.00, 'output': 25.00},
+    'claude-opus-4-0-20250514': {'input': 15.00, 'output': 75.00},
+    'claude-sonnet-4-5-20251101': {'input': 3.00, 'output': 15.00},
+    'claude-sonnet-4-0-20250514': {'input': 3.00, 'output': 15.00},
     'claude-haiku-4-5-20251001': {'input': 1.00, 'output': 5.00},
-    'claude-3-5-haiku-20241022': {'input': 1.00, 'output': 5.00},
-    'claude-3-haiku-20240307': {'input': 0.25, 'output': 1.25},
-    'claude-3-5-sonnet-20241022': {'input': 3.00, 'output': 15.00},
-    'claude-3-sonnet-20240229': {'input': 3.00, 'output': 15.00},
 }
 
 # Default model for different operations
 DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
-FALLBACK_MODEL = 'claude-3-5-sonnet-20241022'
+FALLBACK_MODEL = 'claude-sonnet-4-5-20251101'
 
 
 class AIClient:
