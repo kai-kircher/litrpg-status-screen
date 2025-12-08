@@ -1,5 +1,5 @@
 """Text parsing module"""
 
-from .event_parser import EventParser, ProgressionEvent
+from .event_parser import EventParser, BracketEvent
 
-__all__ = ["EventParser", "ProgressionEvent"]
+__all__ = ["EventParser", "BracketEvent"]
