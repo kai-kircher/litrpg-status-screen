@@ -76,15 +76,16 @@ class TocScraper:
         The Wandering Inn ToC structure typically has:
         - Links to chapters in chronological order
         - Mix of regular chapters and interludes
-        - Various URL patterns
+        - Chapter URLs follow date pattern: /YYYY/MM/DD/chapter-slug/
 
-        This method tries multiple selectors to find chapter links.
+        This method specifically looks for chapter links with date-based URLs.
         """
+        import re
+
         chapters = []
         order_index = 1
 
         # Try to find the main content area
-        # Common selectors for ToC pages
         content_selectors = [
             '.entry-content',
             '.chapter-list',
@@ -104,10 +105,15 @@ class TocScraper:
             logger.warning("Could not find content container, searching entire page")
             content_elem = soup
 
-        # Find all links that look like chapter links
+        # Find all links
         links = content_elem.find_all('a', href=True)
-
         logger.info(f"Found {len(links)} total links in ToC")
+
+        # Pattern for chapter URLs: /YYYY/MM/DD/something/
+        # This matches the date-based URL structure used by Wandering Inn
+        chapter_url_pattern = re.compile(r'/\d{4}/\d{2}/\d{2}/[^/]+/?$')
+
+        seen_urls = set()  # Avoid duplicates
 
         for link in links:
             href = link['href']
@@ -117,26 +123,7 @@ class TocScraper:
             if not href or not title:
                 continue
 
-            # Skip non-chapter links (common patterns to exclude)
-            skip_patterns = [
-                '#',  # Anchor links
-                'mailto:',
-                'javascript:',
-                'twitter.com',
-                'facebook.com',
-                'patreon.com',
-                'discord.com',
-                'table-of-contents',  # Self-reference
-                'about',
-                'contact',
-                'support',
-                '/book/',  # Book overview pages (not actual chapters)
-            ]
-
-            if any(pattern in href.lower() for pattern in skip_patterns):
-                continue
-
-            # Only include links that point to the main site
+            # Normalize URL
             if not href.startswith('http'):
                 href = urljoin(self.base_url, href)
 
@@ -144,12 +131,23 @@ class TocScraper:
             if not href.startswith(self.base_url):
                 continue
 
+            # Only include links that match the chapter URL pattern (date-based)
+            # Extract the path from the URL for matching
+            url_path = href.replace(self.base_url, '')
+            if not chapter_url_pattern.search(url_path):
+                continue
+
+            # Skip duplicates
+            if href in seen_urls:
+                continue
+            seen_urls.add(href)
+
             # Detect if this is an interlude
             is_interlude = self._is_interlude(title, href)
 
             chapter_data = {
                 'order_index': order_index,
-                'chapter_number': title,  # The "title" scraped from ToC is actually the chapter number (e.g., "1.00")
+                'chapter_number': title,
                 'url': href,
                 'is_interlude': is_interlude
             }
