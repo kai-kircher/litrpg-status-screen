@@ -31,6 +31,7 @@ class AIResponse:
 
 # Model pricing per 1M tokens (as of Dec 2024)
 MODEL_PRICING = {
+    'claude-haiku-4-5-20251001': {'input': 1.00, 'output': 5.00},
     'claude-3-5-haiku-20241022': {'input': 1.00, 'output': 5.00},
     'claude-3-haiku-20240307': {'input': 0.25, 'output': 1.25},
     'claude-3-5-sonnet-20241022': {'input': 3.00, 'output': 15.00},
@@ -38,7 +39,7 @@ MODEL_PRICING = {
 }
 
 # Default model for different operations
-DEFAULT_MODEL = 'claude-3-5-haiku-20241022'
+DEFAULT_MODEL = 'claude-haiku-4-5-20251001'
 FALLBACK_MODEL = 'claude-3-5-sonnet-20241022'
 
 
