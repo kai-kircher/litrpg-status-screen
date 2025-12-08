@@ -29,6 +29,9 @@ services:
       context: ./web
       dockerfile: Dockerfile
     container_name: wandering-inn-web
+    # Add docker group for socket access (find gid with: stat -c '%g' /var/run/docker.sock)
+    group_add:
+      - ${DOCKER_GID:-999}
     environment:
       DB_HOST: postgres
       DB_PORT: 5432
