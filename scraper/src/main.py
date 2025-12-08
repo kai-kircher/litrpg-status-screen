@@ -1092,5 +1092,433 @@ def wiki_search(query, entity_type):
         sys.exit(1)
 
 
+# ============================================================================
+# BATCH PROCESSING COMMANDS (50% cost savings)
+# ============================================================================
+
+@cli.command('batch-extract-characters')
+@click.option('--start', '-s', type=int, default=1, help='Starting chapter index')
+@click.option('--end', '-e', type=int, help='Ending chapter index')
+@click.option('--dry-run', is_flag=True, help='Preview batch without submitting')
+def batch_extract_characters(start, end, dry_run):
+    """Submit character extraction as a batch job (50% cheaper, async)
+
+    Batch jobs are processed asynchronously and typically complete within 1 hour.
+    Use 'batch-status' to check progress and 'batch-process-results' to retrieve results.
+    """
+    from .db import init_pool, get_connection, return_connection
+    from .ai import BatchProcessor
+
+    try:
+        init_pool()
+
+        # Get chapters to process
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        query = """
+            SELECT c.id, c.order_index, c.chapter_number, c.content
+            FROM chapters c
+            LEFT JOIN ai_chapter_state acs ON c.id = acs.chapter_id
+            WHERE c.content IS NOT NULL
+              AND c.order_index >= %s
+              AND (acs.characters_extracted IS NULL OR acs.characters_extracted = FALSE)
+        """
+        params = [start]
+        if end:
+            query += " AND c.order_index <= %s"
+            params.append(end)
+        query += " ORDER BY c.order_index"
+        cursor.execute(query, params)
+
+        chapters = cursor.fetchall()
+        cursor.close()
+        return_connection(conn)
+
+        if not chapters:
+            logging.info("No chapters to process")
+            return
+
+        logging.info(f"Preparing batch for {len(chapters)} chapters")
+
+        # Prepare batch
+        processor = BatchProcessor()
+        requests, metadata = processor.prepare_character_extraction_batch(chapters)
+
+        if not requests:
+            logging.info("No requests to submit")
+            return
+
+        click.echo(f"\nBatch Summary:")
+        click.echo(f"  Chapters: {len(chapters)}")
+        click.echo(f"  Requests: {len(requests)}")
+        click.echo(f"  Estimated cost: ~${len(requests) * 0.01:.2f} (50% of standard)")
+
+        if dry_run:
+            click.echo("\nDRY RUN - batch not submitted")
+            click.echo("Sample request custom_ids:")
+            for req in requests[:5]:
+                click.echo(f"  {req.custom_id}")
+            return
+
+        # Submit batch
+        batch_info = processor.submit_batch(
+            requests=requests,
+            metadata=metadata,
+            batch_type='character_extraction',
+            start_chapter=start,
+            end_chapter=end
+        )
+
+        click.echo(f"\nBatch submitted successfully!")
+        click.echo(f"  Batch ID: {batch_info.batch_id}")
+        click.echo(f"  Database ID: {batch_info.db_id}")
+        click.echo(f"  Total requests: {batch_info.total_requests}")
+        click.echo(f"\nUse 'batch-status' to check progress")
+        click.echo(f"Use 'batch-process-results --batch-id {batch_info.batch_id}' when complete")
+
+    except Exception as e:
+        logging.error(f"Batch submission failed: {e}")
+        sys.exit(1)
+
+
+@cli.command('batch-attribute-events')
+@click.option('--start', '-s', type=int, default=1, help='Starting chapter index')
+@click.option('--end', '-e', type=int, help='Ending chapter index')
+@click.option('--dry-run', is_flag=True, help='Preview batch without submitting')
+def batch_attribute_events(start, end, dry_run):
+    """Submit event attribution as a batch job (50% cheaper, async)
+
+    Batch jobs are processed asynchronously and typically complete within 1 hour.
+    Use 'batch-status' to check progress and 'batch-process-results' to retrieve results.
+    """
+    from .db import init_pool, get_connection, return_connection
+    from .ai import BatchProcessor
+    from .ai.event_attributor import get_unprocessed_events
+
+    try:
+        init_pool()
+
+        # Get chapters with unprocessed events
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        query = """
+            SELECT c.id, c.order_index, c.chapter_number
+            FROM chapters c
+            WHERE c.order_index >= %s
+              AND EXISTS (
+                  SELECT 1 FROM raw_events re
+                  WHERE re.chapter_id = c.id
+                    AND re.ai_confidence IS NULL
+                    AND re.archived = FALSE
+              )
+        """
+        params = [start]
+        if end:
+            query += " AND c.order_index <= %s"
+            params.append(end)
+        query += " ORDER BY c.order_index"
+        cursor.execute(query, params)
+
+        chapters_info = cursor.fetchall()
+
+        # Get characters for each chapter
+        cursor.execute("SELECT name FROM characters ORDER BY name")
+        all_characters = [row[0] for row in cursor.fetchall()]
+
+        cursor.close()
+        return_connection(conn)
+
+        if not chapters_info:
+            logging.info("No chapters with unprocessed events")
+            return
+
+        # Build chapter events data
+        chapter_events = []
+        total_events = 0
+
+        for chapter_id, order_index, chapter_number in chapters_info:
+            events = get_unprocessed_events(chapter_id)
+            if events:
+                chapter_events.append({
+                    'chapter_id': chapter_id,
+                    'chapter_number': chapter_number,
+                    'events': events,
+                    'characters': all_characters
+                })
+                total_events += len(events)
+
+        if not chapter_events:
+            logging.info("No events to process")
+            return
+
+        logging.info(f"Preparing batch for {len(chapter_events)} chapters, {total_events} events")
+
+        # Prepare batch
+        processor = BatchProcessor()
+        requests, metadata = processor.prepare_event_attribution_batch(chapter_events)
+
+        if not requests:
+            logging.info("No requests to submit")
+            return
+
+        click.echo(f"\nBatch Summary:")
+        click.echo(f"  Chapters: {len(chapter_events)}")
+        click.echo(f"  Total events: {total_events}")
+        click.echo(f"  Requests: {len(requests)}")
+        click.echo(f"  Estimated cost: ~${len(requests) * 0.01:.2f} (50% of standard)")
+
+        if dry_run:
+            click.echo("\nDRY RUN - batch not submitted")
+            return
+
+        # Submit batch
+        batch_info = processor.submit_batch(
+            requests=requests,
+            metadata=metadata,
+            batch_type='event_attribution',
+            start_chapter=start,
+            end_chapter=end
+        )
+
+        click.echo(f"\nBatch submitted successfully!")
+        click.echo(f"  Batch ID: {batch_info.batch_id}")
+        click.echo(f"  Database ID: {batch_info.db_id}")
+        click.echo(f"  Total requests: {batch_info.total_requests}")
+        click.echo(f"\nUse 'batch-status' to check progress")
+        click.echo(f"Use 'batch-process-results --batch-id {batch_info.batch_id}' when complete")
+
+    except Exception as e:
+        logging.error(f"Batch submission failed: {e}")
+        sys.exit(1)
+
+
+@cli.command('batch-status')
+@click.option('--batch-id', '-b', help='Check specific batch ID')
+@click.option('--update', '-u', is_flag=True, help='Update status from Anthropic API')
+def batch_status(batch_id, update):
+    """Check status of batch jobs"""
+    from .db import init_pool, get_connection, return_connection
+    from .ai import BatchProcessor, BatchStatus
+
+    try:
+        init_pool()
+        processor = BatchProcessor()
+
+        if batch_id:
+            # Check specific batch
+            if update:
+                batch_job = processor.check_batch_status(batch_id)
+                click.echo(f"\nBatch {batch_id}:")
+                click.echo(f"  Status: {batch_job.processing_status.value}")
+                click.echo(f"  Succeeded: {batch_job.request_counts['succeeded']}")
+                click.echo(f"  Errored: {batch_job.request_counts['errored']}")
+                click.echo(f"  Processing: {batch_job.request_counts['processing']}")
+                if batch_job.ended_at:
+                    click.echo(f"  Ended at: {batch_job.ended_at}")
+            else:
+                # Just show from database
+                conn = get_connection()
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT batch_type, processing_status, total_requests,
+                           requests_succeeded, requests_errored, created_at, ended_at
+                    FROM ai_batch_jobs WHERE batch_id = %s
+                    """,
+                    (batch_id,)
+                )
+                row = cursor.fetchone()
+                cursor.close()
+                return_connection(conn)
+
+                if row:
+                    click.echo(f"\nBatch {batch_id}:")
+                    click.echo(f"  Type: {row[0]}")
+                    click.echo(f"  Status: {row[1]}")
+                    click.echo(f"  Total requests: {row[2]}")
+                    click.echo(f"  Succeeded: {row[3] or 0}")
+                    click.echo(f"  Errored: {row[4] or 0}")
+                    click.echo(f"  Created: {row[5]}")
+                    if row[6]:
+                        click.echo(f"  Ended: {row[6]}")
+                else:
+                    click.echo(f"Batch {batch_id} not found in database")
+        else:
+            # Show all pending batches
+            click.echo("\n=== Pending Batches ===")
+            pending = processor.get_pending_batches()
+            if pending:
+                for batch in pending:
+                    if update:
+                        # Refresh from API
+                        job = processor.check_batch_status(batch['batch_id'])
+                        status = job.processing_status.value
+                        processing = job.request_counts['processing']
+                    else:
+                        status = batch['processing_status']
+                        processing = '?'
+
+                    click.echo(f"\n{batch['batch_id']}:")
+                    click.echo(f"  Type: {batch['batch_type']}")
+                    click.echo(f"  Status: {status}")
+                    click.echo(f"  Requests: {batch['total_requests']} (processing: {processing})")
+                    click.echo(f"  Created: {batch['created_at']}")
+            else:
+                click.echo("No pending batches")
+
+            # Show batches ready for processing
+            click.echo("\n=== Ready for Result Processing ===")
+            ready = processor.get_completed_batches_awaiting_processing()
+            if ready:
+                for batch in ready:
+                    click.echo(f"\n{batch['batch_id']}:")
+                    click.echo(f"  Type: {batch['batch_type']}")
+                    click.echo(f"  Requests: {batch['total_requests']} ({batch['requests_succeeded']} succeeded)")
+                    click.echo(f"  Ended: {batch['ended_at']}")
+                    click.echo(f"  Run: batch-process-results --batch-id {batch['batch_id']}")
+            else:
+                click.echo("No batches ready for processing")
+
+    except Exception as e:
+        logging.error(f"Failed to get batch status: {e}")
+        sys.exit(1)
+
+
+@cli.command('batch-process-results')
+@click.option('--batch-id', '-b', required=True, help='Batch ID to process results for')
+@click.option('--dry-run', is_flag=True, help='Preview without saving to database')
+def batch_process_results(batch_id, dry_run):
+    """Process results from a completed batch job"""
+    from .db import init_pool, get_connection, return_connection
+    from .ai import BatchProcessor, BatchStatus
+
+    try:
+        init_pool()
+        processor = BatchProcessor()
+
+        # Check batch status first
+        batch_job = processor.check_batch_status(batch_id)
+
+        if batch_job.processing_status != BatchStatus.ENDED:
+            click.echo(f"Batch {batch_id} is still {batch_job.processing_status.value}")
+            click.echo(f"  Processing: {batch_job.request_counts['processing']}")
+            click.echo(f"  Succeeded: {batch_job.request_counts['succeeded']}")
+            sys.exit(1)
+
+        # Get batch type from database
+        conn = get_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT batch_type FROM ai_batch_jobs WHERE batch_id = %s",
+            (batch_id,)
+        )
+        row = cursor.fetchone()
+        cursor.close()
+        return_connection(conn)
+
+        if not row:
+            click.echo(f"Batch {batch_id} not found in database")
+            sys.exit(1)
+
+        batch_type = row[0]
+
+        click.echo(f"\nProcessing {batch_type} results for batch {batch_id}")
+        click.echo(f"  Total requests: {sum(batch_job.request_counts.values())}")
+        click.echo(f"  Succeeded: {batch_job.request_counts['succeeded']}")
+        click.echo(f"  Errored: {batch_job.request_counts['errored']}")
+
+        if dry_run:
+            click.echo("\nDRY RUN - results not saved")
+
+        # Process based on type
+        if batch_type == 'character_extraction':
+            stats = processor.process_character_extraction_results(batch_id, dry_run=dry_run)
+            click.echo(f"\nResults:")
+            click.echo(f"  Chapters processed: {stats['chapters_processed']}")
+            click.echo(f"  Characters found: {stats['characters_found']}")
+            click.echo(f"  New characters created: {stats['new_characters_created']}")
+            click.echo(f"  Errors: {stats['errors']}")
+
+        elif batch_type == 'event_attribution':
+            stats = processor.process_event_attribution_results(batch_id, dry_run=dry_run)
+            click.echo(f"\nResults:")
+            click.echo(f"  Chapters processed: {stats['chapters_processed']}")
+            click.echo(f"  Events processed: {stats['events_processed']}")
+            click.echo(f"  Auto-accepted: {stats['auto_accepted']}")
+            click.echo(f"  Flagged for review: {stats['flagged_review']}")
+            click.echo(f"  Errors: {stats['errors']}")
+
+        else:
+            click.echo(f"Unknown batch type: {batch_type}")
+            sys.exit(1)
+
+    except Exception as e:
+        logging.error(f"Failed to process batch results: {e}")
+        sys.exit(1)
+
+
+@cli.command('batch-list')
+@click.option('--limit', '-l', type=int, default=20, help='Number of batches to show')
+def batch_list(limit):
+    """List recent batch jobs"""
+    from .db import init_pool, get_connection, return_connection
+
+    try:
+        init_pool()
+        conn = get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute(
+            """
+            SELECT batch_id, batch_type, processing_status, total_requests,
+                   requests_succeeded, requests_errored,
+                   total_input_tokens, total_output_tokens, estimated_cost_usd,
+                   created_at, ended_at, results_processed_at
+            FROM ai_batch_jobs
+            ORDER BY created_at DESC
+            LIMIT %s
+            """,
+            (limit,)
+        )
+
+        batches = cursor.fetchall()
+        cursor.close()
+        return_connection(conn)
+
+        if not batches:
+            click.echo("No batch jobs found")
+            return
+
+        click.echo("\n" + "=" * 80)
+        click.echo("Recent Batch Jobs")
+        click.echo("=" * 80)
+
+        for batch in batches:
+            (batch_id, batch_type, status, total, succeeded, errored,
+             input_tokens, output_tokens, cost, created, ended, processed) = batch
+
+            click.echo(f"\n{batch_id}")
+            click.echo(f"  Type: {batch_type}")
+            click.echo(f"  Status: {status}")
+            click.echo(f"  Requests: {total} (succeeded: {succeeded or 0}, errored: {errored or 0})")
+
+            if input_tokens:
+                click.echo(f"  Tokens: {input_tokens:,} in, {output_tokens:,} out")
+            if cost:
+                click.echo(f"  Cost: ${cost:.4f}")
+
+            click.echo(f"  Created: {created}")
+            if ended:
+                click.echo(f"  Ended: {ended}")
+            if processed:
+                click.echo(f"  Results processed: {processed}")
+
+    except Exception as e:
+        logging.error(f"Failed to list batches: {e}")
+        sys.exit(1)
+
+
 if __name__ == '__main__':
     cli()

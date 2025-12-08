@@ -63,6 +63,21 @@ python -m src.main ai-stats                          # Show AI usage statistics
 python -m src.main review-queue                      # Show events needing review
 ```
 
+**Batch Processing Commands** (50% cheaper, async - requires ANTHROPIC_API_KEY):
+```bash
+# Submit batch jobs (processed async, typically <1 hour)
+python -m src.main batch-extract-characters --start 1 --end 100   # Batch character extraction
+python -m src.main batch-attribute-events --start 1 --end 100     # Batch event attribution
+python -m src.main batch-extract-characters --dry-run             # Preview without submitting
+
+# Monitor and process results
+python -m src.main batch-status                      # Show pending/ready batches
+python -m src.main batch-status --update             # Refresh status from Anthropic API
+python -m src.main batch-status -b msgbatch_xxx      # Check specific batch
+python -m src.main batch-process-results -b msgbatch_xxx  # Download and process results
+python -m src.main batch-list                        # List recent batch jobs with costs
+```
+
 **Wiki Reference Data Commands**:
 ```bash
 python -m src.main scrape-wiki                       # Scrape all wiki data (characters, skills, spells, classes)
