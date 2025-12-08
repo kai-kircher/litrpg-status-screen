@@ -50,6 +50,8 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Mount compose file so web can spawn scraper jobs
       - ./docker-compose.prod.yml:/app/docker-compose.prod.yml:ro
+      # Mount env file for docker compose to read when spawning scraper
+      - ./.env.production:/app/.env.production:ro
     depends_on:
       postgres:
         condition: service_healthy
