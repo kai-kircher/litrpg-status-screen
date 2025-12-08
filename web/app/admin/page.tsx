@@ -191,6 +191,35 @@ export default function AdminPage() {
     }
   };
 
+  // Reset actions
+  const performReset = async (action: string, confirmMessage: string) => {
+    if (!confirm(confirmMessage)) return;
+
+    try {
+      const response = await fetch('/api/admin/reset', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(data.message);
+        loadStats();
+        loadEvents();
+        if (activeTab === 'characters') {
+          loadAllCharacters();
+        }
+      } else {
+        const error = await response.json();
+        alert(`Error: ${error.error}`);
+      }
+    } catch (err) {
+      console.error('Error performing reset:', err);
+      alert('Failed to perform reset');
+    }
+  };
+
   // Initial load and polling
   useEffect(() => {
     loadStats();
@@ -913,6 +942,40 @@ export default function AdminPage() {
                       >
                         Full AI Process
                       </button>
+                    </div>
+
+                    {/* Reset Actions */}
+                    <div className="mt-3 pt-3 border-t border-gray-200">
+                      <p className="text-xs text-gray-500 mb-2">Reset Actions</p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          onClick={() => performReset(
+                            'unassign-all-events',
+                            'Are you sure you want to unassign ALL events? This will remove character assignments but keep processed status.'
+                          )}
+                          className="px-3 py-1.5 text-sm bg-orange-100 text-orange-700 rounded hover:bg-orange-200"
+                        >
+                          Unassign All Events
+                        </button>
+                        <button
+                          onClick={() => performReset(
+                            'delete-all-characters',
+                            'Are you sure you want to DELETE ALL CHARACTERS? This will also delete all classes, levels, abilities, and unassign all events.'
+                          )}
+                          className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
+                        >
+                          Delete All Characters
+                        </button>
+                        <button
+                          onClick={() => performReset(
+                            'full-reset',
+                            'Are you sure you want to perform a FULL RESET? This will delete all characters and reset all events to unassigned/unprocessed.'
+                          )}
+                          className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
+                        >
+                          Full Reset
+                        </button>
+                      </div>
                     </div>
                   </div>
                 )}
