@@ -137,6 +137,11 @@ class TocScraper:
             if not chapter_url_pattern.search(url_path):
                 continue
 
+            # Skip known non-chapter pages that happen to have date-based URLs
+            skip_slugs = ['glossary', 'characters', 'map', 'timeline']
+            if any(slug in url_path.lower() for slug in skip_slugs):
+                continue
+
             # Skip duplicates
             if href in seen_urls:
                 continue
