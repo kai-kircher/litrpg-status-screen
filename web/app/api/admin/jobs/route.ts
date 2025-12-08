@@ -288,9 +288,10 @@ function buildDockerCommand(scraperCommand: string): string {
   // Run the scraper command in a new Docker container
   // Using docker-compose run to inherit environment and network settings
   // The compose file is mounted into the container at /app/docker-compose.prod.yml
-  // The env file is mounted at /app/.env.production for variable interpolation
+  // Pass ANTHROPIC_API_KEY directly since the web container has it in env
   // Use --no-deps since postgres is already running, and -p to match the existing project name
-  return `docker compose -p litrpg-status-screen -f /app/docker-compose.prod.yml --env-file /app/.env.production run --rm --no-deps scraper ${scraperCommand}`;
+  const apiKey = process.env.ANTHROPIC_API_KEY || '';
+  return `docker compose -p litrpg-status-screen -f /app/docker-compose.prod.yml run --rm --no-deps -e ANTHROPIC_API_KEY="${apiKey}" scraper ${scraperCommand}`;
 }
 
 async function updateJobProgress(jobId: number, output: string): Promise<void> {

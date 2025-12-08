@@ -43,6 +43,8 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
       # For spawning scraper jobs
       DOCKER_HOST: ${DOCKER_HOST:-unix:///var/run/docker.sock}
+      # Pass through to scraper jobs
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
     ports:
       - "${PORT:-3000}:3000"
     volumes:
@@ -50,8 +52,6 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       # Mount compose file so web can spawn scraper jobs
       - ./docker-compose.prod.yml:/app/docker-compose.prod.yml:ro
-      # Mount env file for docker compose to read when spawning scraper
-      - ./.env.production:/app/.env.production:ro
     depends_on:
       postgres:
         condition: service_healthy
