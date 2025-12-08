@@ -92,12 +92,23 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SERVER_SSH_KEY }}
           port: ${{ secrets.SERVER_SSH_PORT || 22 }}
+          envs: ANTHROPIC_API_KEY
           script: |
             cd ${{ secrets.APP_PATH || '/app/wandering-inn-tracker' }}
             git fetch origin main
             git reset --hard origin/main
+
+            # Update .env.production with API key from CI
+            if [ -n "$ANTHROPIC_API_KEY" ]; then
+              grep -v "^ANTHROPIC_API_KEY=" .env.production 2>/dev/null > .env.production.tmp || true
+              echo "ANTHROPIC_API_KEY=$ANTHROPIC_API_KEY" >> .env.production.tmp
+              mv .env.production.tmp .env.production
+            fi
+
             chmod +x deploy.sh
             ./deploy.sh ${{ inputs.run_migrations && 'migrate' || '' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
 
   notify:
     name: Notify on Failure
