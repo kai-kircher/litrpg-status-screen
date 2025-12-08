@@ -896,10 +896,10 @@ export default function AdminPage() {
                         Scrape
                       </button>
                       <button
-                        onClick={() => startJob('extract-characters')}
+                        onClick={() => startJob('scrape-wiki')}
                         className="px-3 py-1.5 text-sm bg-purple-600 text-white rounded hover:bg-purple-700"
                       >
-                        Extract Characters
+                        Scrape Wiki
                       </button>
                       <button
                         onClick={() => startJob('attribute-events')}

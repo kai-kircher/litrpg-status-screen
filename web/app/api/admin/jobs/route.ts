@@ -121,6 +121,9 @@ export async function POST(request: NextRequest) {
       case 'attribute-events':
         command = buildAttributeEventsCommand(config);
         break;
+      case 'scrape-wiki':
+        command = 'python -m src.main scrape-wiki';
+        break;
       default:
         return NextResponse.json(
           { error: `Unknown job type: ${jobType}` },
