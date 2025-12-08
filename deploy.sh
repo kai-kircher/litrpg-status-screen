@@ -134,6 +134,10 @@ pull_images() {
     log "Pulling new Docker images..."
     $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull --quiet 2>/dev/null || \
         $DOCKER_COMPOSE -f "$COMPOSE_FILE" pull
+    # Also pull scraper image (it's a profiled service so not pulled by default)
+    log "Pulling scraper image..."
+    $DOCKER_COMPOSE -f "$COMPOSE_FILE" --profile scraper pull scraper --quiet 2>/dev/null || \
+        $DOCKER_COMPOSE -f "$COMPOSE_FILE" --profile scraper pull scraper || true
     log "Images pulled successfully"
 }
 
