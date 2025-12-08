@@ -30,8 +30,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install Docker CLI for spawning scraper jobs
-RUN apk add --no-cache docker-cli
+# Install Docker CLI and compose plugin for spawning scraper jobs
+RUN apk add --no-cache docker-cli docker-cli-compose
 
 RUN addgroup --system --gid 1001 nodejs
 RUN adduser --system --uid 1001 nextjs
