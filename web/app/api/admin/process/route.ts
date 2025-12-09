@@ -118,9 +118,9 @@ export async function POST(request: Request) {
             continue;
         }
 
-        // Mark event as processed
+        // Mark event as processed and clear needs_review flag
         await client.query(
-          'UPDATE raw_events SET is_processed = true WHERE id = $1',
+          'UPDATE raw_events SET is_processed = true, needs_review = false WHERE id = $1',
           [event.id]
         );
 
