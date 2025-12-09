@@ -30,7 +30,7 @@ export async function GET(request: Request) {
         re.created_at
       FROM raw_events re
       JOIN chapters c ON re.chapter_id = c.id
-      LEFT JOIN characters ch ON re.character_id = ch.id
+      LEFT JOIN wiki_characters ch ON re.character_id = ch.id
       WHERE 1=1
     `;
 
@@ -85,7 +85,7 @@ export async function GET(request: Request) {
       SELECT COUNT(*)
       FROM raw_events re
       JOIN chapters c ON re.chapter_id = c.id
-      LEFT JOIN characters ch ON re.character_id = ch.id
+      LEFT JOIN wiki_characters ch ON re.character_id = ch.id
       WHERE 1=1
     `;
     const countParams: any[] = [];
