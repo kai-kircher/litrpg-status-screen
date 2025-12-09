@@ -460,9 +460,9 @@ export default function AdminPage() {
   };
 
   const processAllEvents = async () => {
-    // Get all event IDs that are ready to process (assigned but not processed)
+    // Get all event IDs that are ready to process (have character and not processed)
     const eventIdsToProcess = events
-      .filter(e => e.is_assigned && !e.is_processed)
+      .filter(e => e.character_id && !e.is_processed)
       .map(e => e.id);
 
     if (eventIdsToProcess.length === 0) {
@@ -1164,8 +1164,8 @@ export default function AdminPage() {
               </button>
             </div>
 
-            {/* Process All Button (only for ready_to_process status) */}
-            {statusFilter === 'ready_to_process' && events.length > 0 && (
+            {/* Process All Button (for ready_to_process and needs_review status) */}
+            {(statusFilter === 'ready_to_process' || statusFilter === 'needs_review') && events.length > 0 && (
               <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded">
                 <div className="flex items-center justify-between">
                   <div>
@@ -1173,7 +1173,7 @@ export default function AdminPage() {
                       Batch Process
                     </p>
                     <p className="text-xs text-green-700 mt-0.5">
-                      Process all {events.filter(e => e.is_assigned && !e.is_processed).length} event(s) on this page
+                      Process all {events.filter(e => e.character_id && !e.is_processed).length} event(s) on this page
                     </p>
                   </div>
                   <button
