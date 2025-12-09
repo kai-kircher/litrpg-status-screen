@@ -66,6 +66,9 @@ CREATE TABLE raw_events (
             'aspect',
             'title',
             'rank',
+            'ability_obtained',
+            'ability_removed',
+            'false_positive',
             'other'
         )
     )

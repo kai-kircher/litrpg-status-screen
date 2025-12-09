@@ -1177,11 +1177,13 @@ def batch_extract_characters(start, end, dry_run):
 @click.option('--start', '-s', type=int, default=1, help='Starting chapter index')
 @click.option('--end', '-e', type=int, help='Ending chapter index')
 @click.option('--dry-run', is_flag=True, help='Preview batch without submitting')
-def batch_attribute_events(start, end, dry_run):
+@click.option('--wait/--no-wait', default=True, help='Wait for batch completion and process results (default: wait)')
+@click.option('--poll-interval', type=int, default=30, help='Seconds between status checks (default: 30)')
+def batch_attribute_events(start, end, dry_run, wait, poll_interval):
     """Submit event attribution as a batch job (50% cheaper, async)
 
-    Batch jobs are processed asynchronously and typically complete within 1 hour.
-    Use 'batch-status' to check progress and 'batch-process-results' to retrieve results.
+    By default, waits for the batch to complete and processes results automatically.
+    Use --no-wait to submit and exit immediately.
     """
     from .db import init_pool, get_connection, return_connection
     from .ai import BatchProcessor
@@ -1277,8 +1279,51 @@ def batch_attribute_events(start, end, dry_run):
         click.echo(f"  Batch ID: {batch_info.batch_id}")
         click.echo(f"  Database ID: {batch_info.db_id}")
         click.echo(f"  Total requests: {batch_info.total_requests}")
-        click.echo(f"\nUse 'batch-status' to check progress")
-        click.echo(f"Use 'batch-process-results --batch-id {batch_info.batch_id}' when complete")
+
+        if not wait:
+            click.echo(f"\nUse 'batch-status' to check progress")
+            click.echo(f"Use 'batch-process-results --batch-id {batch_info.batch_id}' when complete")
+            return
+
+        # Poll for completion
+        import time
+        from .ai import BatchStatus
+
+        click.echo(f"\nWaiting for batch to complete (polling every {poll_interval}s)...")
+
+        batch_id = batch_info.batch_id
+        while True:
+            time.sleep(poll_interval)
+
+            try:
+                batch_job = processor.check_batch_status(batch_id)
+                succeeded = batch_job.request_counts.get('succeeded', 0)
+                errored = batch_job.request_counts.get('errored', 0)
+                processing = batch_job.request_counts.get('processing', 0)
+
+                click.echo(f"  Status: {batch_job.processing_status.value} - "
+                          f"succeeded: {succeeded}, errored: {errored}, processing: {processing}")
+
+                if batch_job.processing_status == BatchStatus.ENDED:
+                    click.echo("\nBatch completed! Processing results...")
+                    break
+                elif batch_job.processing_status in (BatchStatus.CANCELING, BatchStatus.EXPIRED):
+                    click.echo(f"\nBatch {batch_job.processing_status.value}, cannot process results")
+                    sys.exit(1)
+
+            except Exception as e:
+                logging.warning(f"Error checking status: {e}")
+                # Continue polling on transient errors
+
+        # Process results
+        stats = processor.process_event_attribution_results(batch_id, dry_run=False)
+
+        click.echo(f"\nResults:")
+        click.echo(f"  Chapters processed: {stats['chapters_processed']}")
+        click.echo(f"  Events processed: {stats['events_processed']}")
+        click.echo(f"  Auto-accepted: {stats['auto_accepted']}")
+        click.echo(f"  Flagged for review: {stats['flagged_review']}")
+        click.echo(f"  Errors: {stats['errors']}")
 
     except Exception as e:
         logging.error(f"Batch submission failed: {e}")
