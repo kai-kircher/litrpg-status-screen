@@ -74,15 +74,15 @@ class BatchProcessor:
         requests = []
         metadata = {}
 
-        # Get wiki characters for the prompt
+        # Get wiki characters for the prompt (wiki is now the canonical source)
         wiki_characters = self.wiki_cache.get_all_character_names()
         wiki_context = self.wiki_cache.get_character_context_for_prompt(wiki_characters[:100])
 
-        # Get existing characters from database
-        db_characters = self._get_db_characters()
-        all_known_characters = list(set(wiki_characters + db_characters))
+        # Wiki is the source of truth for characters
+        all_known_characters = wiki_characters
 
-        known_aliases = self._get_character_aliases()
+        # Get aliases from wiki cache
+        known_aliases = self._get_wiki_character_aliases()
 
         for chapter_id, order_index, chapter_number, content in chapters:
             custom_id = f"char_extract_{chapter_id}"
@@ -615,83 +615,26 @@ IMPORTANT:
     # HELPER METHODS
     # =========================================================================
 
-    def _get_db_characters(self) -> List[str]:
-        """Get character names from database"""
-        conn = None
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute("SELECT DISTINCT name FROM characters")
-            names = [row[0] for row in cursor.fetchall()]
-            cursor.close()
-            return names
-        except Exception as e:
-            logger.error(f"Failed to get DB characters: {e}")
-            return []
-        finally:
-            if conn:
-                return_connection(conn)
-
-    def _get_character_aliases(self) -> Dict[str, List[str]]:
-        """Get character name to aliases mapping"""
-        conn = None
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT name, aliases FROM characters WHERE aliases IS NOT NULL"
-            )
-            aliases = {row[0]: row[1] for row in cursor.fetchall() if row[1]}
-            cursor.close()
-            return aliases
-        except Exception as e:
-            logger.error(f"Failed to get character aliases: {e}")
-            return {}
-        finally:
-            if conn:
-                return_connection(conn)
+    def _get_wiki_character_aliases(self) -> Dict[str, List[str]]:
+        """Get character name to aliases mapping from wiki cache"""
+        aliases = {}
+        for name in self.wiki_cache.get_all_character_names():
+            char = self.wiki_cache.find_character(name)
+            if char and char.aliases:
+                aliases[name] = char.aliases
+        return aliases
 
     def _build_character_context(self, character_names: List[str]) -> Dict[str, Any]:
-        """Build character context for event attribution"""
+        """Build character context for event attribution from wiki"""
         context = {}
-        conn = None
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-
-            for name in character_names:
-                cursor.execute(
-                    "SELECT knowledge FROM characters WHERE name = %s",
-                    (name,)
-                )
-                row = cursor.fetchone()
-                if row and row[0]:
-                    knowledge = row[0] if isinstance(row[0], dict) else json.loads(row[0])
-                    context[name] = {
-                        'species': knowledge.get('species', 'Unknown'),
-                        'classes': knowledge.get('classes', []),
-                        'current_levels': knowledge.get('current_levels', {})
-                    }
-
-                # Enrich with wiki data
-                wiki_char = self.wiki_cache.find_character(name)
-                if wiki_char:
-                    if name not in context:
-                        context[name] = {}
-                    if wiki_char.species:
-                        context[name]['species'] = wiki_char.species
-                    if wiki_char.aliases:
-                        context[name]['aliases'] = wiki_char.aliases[:5]
-
-            cursor.close()
-            return context
-
-        except Exception as e:
-            logger.error(f"Failed to build character context: {e}")
-            return {}
-        finally:
-            if conn:
-                return_connection(conn)
+        for name in character_names:
+            wiki_char = self.wiki_cache.find_character(name)
+            if wiki_char:
+                context[name] = {
+                    'species': wiki_char.species or 'Unknown',
+                    'aliases': wiki_char.aliases[:5] if wiki_char.aliases else []
+                }
+        return context
 
     def _build_wiki_reference_for_events(self, events: List[Dict[str, Any]]) -> Dict[str, Any]:
         """Build wiki reference data for events"""
@@ -849,34 +792,18 @@ IMPORTANT:
         return attributions
 
     def _get_character_id(self, name: str) -> Optional[int]:
-        """Look up character ID by name"""
+        """Look up character ID by name from wiki_characters"""
         if not name:
             return None
-
-        conn = None
-        try:
-            conn = get_connection()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT id FROM characters WHERE LOWER(name) = LOWER(%s)",
-                (name,)
-            )
-            row = cursor.fetchone()
-            cursor.close()
-            return row[0] if row else None
-        except Exception:
-            return None
-        finally:
-            if conn:
-                return_connection(conn)
+        return self.wiki_cache.get_character_id(name)
 
     def _save_extracted_characters(
         self,
         characters: List[ExtractedCharacter],
         chapter_id: int
     ) -> int:
-        """Save new characters to database"""
-        new_count = 0
+        """Update first_appearance_chapter_id for characters found in wiki"""
+        updated_count = 0
         conn = None
 
         try:
@@ -884,37 +811,30 @@ IMPORTANT:
             cursor = conn.cursor()
 
             for char in characters:
-                if not char.is_new:
-                    continue
-
-                knowledge = {}
-                if char.species:
-                    knowledge['species'] = char.species
-                if char.description:
-                    knowledge['summary'] = char.description
-
-                cursor.execute(
-                    """
-                    INSERT INTO characters (name, first_appearance_chapter_id, knowledge)
-                    VALUES (%s, %s, %s)
-                    ON CONFLICT (name) DO NOTHING
-                    RETURNING id
-                    """,
-                    (char.name, chapter_id, json.dumps(knowledge) if knowledge else '{}')
-                )
-
-                if cursor.fetchone():
-                    new_count += 1
-                    logger.info(f"Created new character: {char.name}")
+                # Look up character in wiki
+                wiki_char = self.wiki_cache.find_character(char.name)
+                if wiki_char and wiki_char.first_appearance_chapter_id is None:
+                    # Update first_appearance_chapter_id if not set
+                    cursor.execute(
+                        """
+                        UPDATE wiki_characters
+                        SET first_appearance_chapter_id = %s
+                        WHERE id = %s AND first_appearance_chapter_id IS NULL
+                        """,
+                        (chapter_id, wiki_char.id)
+                    )
+                    if cursor.rowcount > 0:
+                        updated_count += 1
+                        logger.debug(f"Updated first appearance for {char.name}")
 
             conn.commit()
             cursor.close()
-            return new_count
+            return updated_count
 
         except Exception as e:
             if conn:
                 conn.rollback()
-            logger.error(f"Failed to save characters: {e}")
+            logger.error(f"Failed to update character first appearances: {e}")
             return 0
         finally:
             if conn:

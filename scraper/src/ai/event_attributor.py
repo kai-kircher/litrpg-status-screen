@@ -8,7 +8,6 @@ from dataclasses import dataclass
 from .client import AIClient, AIResponse, AIError
 from .cost_tracker import CostTracker
 from .prompts import EVENT_ATTRIBUTION_SYSTEM
-from .character_extractor import CharacterExtractor
 from .wiki_reference import get_wiki_cache
 from ..db import get_connection, return_connection
 
@@ -42,8 +41,7 @@ class EventAttributor:
     def __init__(
         self,
         ai_client: Optional[AIClient] = None,
-        cost_tracker: Optional[CostTracker] = None,
-        character_extractor: Optional[CharacterExtractor] = None
+        cost_tracker: Optional[CostTracker] = None
     ):
         """
         Initialize the event attributor.
@@ -51,14 +49,10 @@ class EventAttributor:
         Args:
             ai_client: AIClient instance (created if not provided)
             cost_tracker: CostTracker instance (created if not provided)
-            character_extractor: CharacterExtractor for character lookup
         """
         self.ai_client = ai_client or AIClient()
         self.cost_tracker = cost_tracker or CostTracker()
-        self.character_extractor = character_extractor or CharacterExtractor(
-            ai_client=self.ai_client,
-            cost_tracker=self.cost_tracker
-        )
+        self.wiki_cache = get_wiki_cache()
 
     def attribute_events(
         self,
@@ -129,33 +123,19 @@ class EventAttributor:
     ) -> Tuple[List[EventAttribution], AIResponse]:
         """Process a single batch of events"""
 
-        # Get wiki cache for reference data
-        wiki_cache = get_wiki_cache()
-
-        # Build character context from both DB and wiki
+        # Build character context from wiki
         character_context = {}
         for char_name in chapter_characters[:30]:  # Limit to prevent huge prompts
-            context = self.character_extractor.get_character_context(char_name)
-            if context:
-                knowledge = context.get('knowledge', {})
+            wiki_char = self.wiki_cache.find_character(char_name)
+            if wiki_char:
                 char_info = {
-                    'species': knowledge.get('species', 'Unknown'),
-                    'classes': knowledge.get('classes', []),
-                    'current_levels': knowledge.get('current_levels', {})
+                    'species': wiki_char.species or 'Unknown',
+                    'aliases': wiki_char.aliases[:5] if wiki_char.aliases else []
                 }
-
-                # Enrich with wiki data
-                wiki_char = wiki_cache.find_character(char_name)
-                if wiki_char:
-                    if wiki_char.species:
-                        char_info['species'] = wiki_char.species
-                    if wiki_char.aliases:
-                        char_info['aliases'] = wiki_char.aliases[:5]
-
                 character_context[char_name] = char_info
 
         # Build wiki reference data for skills/spells/classes mentioned in events
-        wiki_ref = self._build_wiki_reference_for_events(events, wiki_cache)
+        wiki_ref = self._build_wiki_reference_for_events(events, self.wiki_cache)
 
         # Format events for prompt
         events_for_prompt = [
@@ -334,10 +314,10 @@ IMPORTANT:
             character_name = attr.get('character_name')
             event_type = attr.get('event_type', 'other')
 
-            # Look up character ID
+            # Look up character ID from wiki
             character_id = None
             if character_name:
-                character_id = self.character_extractor.get_character_id(character_name)
+                character_id = self.wiki_cache.get_character_id(character_name)
 
             # Determine acceptance/review status
             # False positives always need review - even if AI is confident,

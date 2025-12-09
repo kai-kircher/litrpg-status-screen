@@ -8,8 +8,8 @@ export async function GET(request: Request) {
     const limit = searchParams.get('limit');
 
     let query = `
-      SELECT id, name, aliases, created_at
-      FROM characters
+      SELECT id, name, aliases, species, status, wiki_url, first_appearance_chapter_id, scraped_at as created_at
+      FROM wiki_characters
     `;
 
     const params: any[] = [];
@@ -40,28 +40,10 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
-  try {
-    const { name } = await request.json();
-
-    if (!name || typeof name !== 'string') {
-      return NextResponse.json(
-        { error: 'Character name is required' },
-        { status: 400 }
-      );
-    }
-
-    const result = await pool.query(
-      'INSERT INTO characters (name) VALUES ($1) RETURNING *',
-      [name]
-    );
-
-    return NextResponse.json(result.rows[0], { status: 201 });
-  } catch (error) {
-    console.error('Error creating character:', error);
-    return NextResponse.json(
-      { error: 'Failed to create character' },
-      { status: 500 }
-    );
-  }
+export async function POST() {
+  // Characters are sourced from the wiki - manual creation is no longer supported
+  return NextResponse.json(
+    { error: 'Characters are managed via wiki scraping. Manual creation is disabled.' },
+    { status: 403 }
+  );
 }

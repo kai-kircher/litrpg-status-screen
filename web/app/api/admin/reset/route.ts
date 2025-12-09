@@ -40,8 +40,8 @@ export async function POST(request: NextRequest) {
         });
       }
 
-      case 'delete-all-characters': {
-        // First, unassign all events from characters
+      case 'clear-progression-data': {
+        // Unassign all events from characters
         await pool.query(
           `UPDATE raw_events
            SET character_id = NULL, is_assigned = false
@@ -53,25 +53,22 @@ export async function POST(request: NextRequest) {
           `DELETE FROM character_abilities RETURNING id`
         );
 
-        // Delete character classes (which includes levels due to cascade or we delete levels first)
+        // Delete character levels
         const levelsResult = await pool.query(
           `DELETE FROM character_levels RETURNING id`
         );
 
+        // Delete character classes
         const classesResult = await pool.query(
           `DELETE FROM character_classes RETURNING id`
         );
 
-        // Delete characters
-        const charactersResult = await pool.query(
-          `DELETE FROM characters RETURNING id`
-        );
+        // Note: wiki_characters are not deleted - they are sourced from the wiki
 
         return NextResponse.json({
           success: true,
-          message: `Deleted ${charactersResult.rowCount} characters`,
+          message: `Cleared progression data`,
           details: {
-            characters: charactersResult.rowCount,
             classes: classesResult.rowCount,
             levels: levelsResult.rowCount,
             abilities: abilitiesResult.rowCount,
@@ -96,7 +93,7 @@ export async function POST(request: NextRequest) {
       }
 
       case 'full-reset': {
-        // Complete reset: delete all characters and their data, unassign and unprocess all events
+        // Complete reset: clear all progression data, unassign and unprocess all events
 
         // Unassign and unprocess all events
         const eventsResult = await pool.query(
@@ -105,18 +102,21 @@ export async function POST(request: NextRequest) {
            RETURNING id`
         );
 
-        // Delete all character-related data
-        await pool.query(`DELETE FROM character_abilities`);
-        await pool.query(`DELETE FROM character_levels`);
-        await pool.query(`DELETE FROM character_classes`);
-        const charactersResult = await pool.query(`DELETE FROM characters RETURNING id`);
+        // Delete all character progression data
+        const abilitiesResult = await pool.query(`DELETE FROM character_abilities RETURNING id`);
+        const levelsResult = await pool.query(`DELETE FROM character_levels RETURNING id`);
+        const classesResult = await pool.query(`DELETE FROM character_classes RETURNING id`);
+
+        // Note: wiki_characters are not deleted - they are sourced from the wiki
 
         return NextResponse.json({
           success: true,
           message: `Full reset complete`,
           details: {
             eventsReset: eventsResult.rowCount,
-            charactersDeleted: charactersResult.rowCount,
+            classesDeleted: classesResult.rowCount,
+            levelsDeleted: levelsResult.rowCount,
+            abilitiesDeleted: abilitiesResult.rowCount,
           },
         });
       }

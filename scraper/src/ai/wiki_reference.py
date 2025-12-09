@@ -19,6 +19,7 @@ class WikiCharacter:
     species: Optional[str]
     status: Optional[str]
     wiki_url: str
+    first_appearance_chapter_id: Optional[int] = None
 
 
 @dataclass
@@ -81,20 +82,21 @@ class WikiReferenceCache:
 
             cursor.execute(
                 """
-                SELECT id, name, aliases, species, status, wiki_url
+                SELECT id, name, aliases, species, status, wiki_url, first_appearance_chapter_id
                 FROM wiki_characters
                 """
             )
 
             for row in cursor.fetchall():
-                char_id, name, aliases, species, status, wiki_url = row
+                char_id, name, aliases, species, status, wiki_url, first_appearance_chapter_id = row
                 char = WikiCharacter(
                     id=char_id,
                     name=name,
                     aliases=aliases or [],
                     species=species,
                     status=status,
-                    wiki_url=wiki_url
+                    wiki_url=wiki_url,
+                    first_appearance_chapter_id=first_appearance_chapter_id
                 )
 
                 # Index by lowercase name
@@ -246,6 +248,23 @@ class WikiReferenceCache:
             canonical_name = self._character_aliases[name_lower]
             return self._characters.get(canonical_name.lower())
 
+        return None
+
+    def get_character_id(self, name: str) -> Optional[int]:
+        """Get character ID by name or alias"""
+        char = self.find_character(name)
+        return char.id if char else None
+
+    def get_character_context(self, name: str) -> Optional[Dict[str, Any]]:
+        """Get character context for event attribution"""
+        char = self.find_character(name)
+        if char:
+            return {
+                'id': char.id,
+                'name': char.name,
+                'species': char.species,
+                'aliases': char.aliases
+            }
         return None
 
     def get_character_context_for_prompt(self, names: List[str]) -> str:

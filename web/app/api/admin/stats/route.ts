@@ -21,8 +21,8 @@ export async function GET() {
       // Scraped chapters (have content)
       pool.query('SELECT COUNT(*) as count FROM chapters WHERE content IS NOT NULL'),
 
-      // Total characters
-      pool.query('SELECT COUNT(*) as count FROM characters'),
+      // Total characters (from wiki)
+      pool.query('SELECT COUNT(*) as count FROM wiki_characters'),
 
       // Total events
       pool.query('SELECT COUNT(*) as count FROM raw_events WHERE archived = FALSE'),
