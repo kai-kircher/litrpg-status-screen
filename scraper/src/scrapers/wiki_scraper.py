@@ -5,6 +5,7 @@ from bs4 import BeautifulSoup
 import logging
 import time
 import re
+import random
 from typing import List, Dict, Optional, Tuple
 from urllib.parse import urljoin, urlparse, parse_qs
 from ..config import Config
@@ -17,56 +18,102 @@ class WikiScraper:
 
     WIKI_BASE_URL = "https://wiki.wanderinginn.com"
 
-    def __init__(self, delay: Optional[float] = None):
+    def __init__(self, delay: Optional[float] = None, max_retries: Optional[int] = None):
         """
         Initialize the wiki scraper
 
         Args:
             delay: Delay between requests in seconds (defaults to Config.WIKI_REQUEST_DELAY)
+            max_retries: Max retry attempts for failed requests (defaults to Config.WIKI_MAX_RETRIES)
         """
-        # Use wiki-specific delay (1s) instead of main site delay (10s)
-        # Wiki has no crawl-delay in robots.txt
         self.delay = delay if delay is not None else Config.WIKI_REQUEST_DELAY
+        self.max_retries = max_retries if max_retries is not None else Config.WIKI_MAX_RETRIES
+        self.retry_backoff = Config.WIKI_RETRY_BACKOFF
         self.session = requests.Session()
         self.session.headers.update({
             'User-Agent': Config.USER_AGENT
         })
         self.last_request_time = 0
+        self.consecutive_failures = 0
 
     def _rate_limit(self):
-        """Enforce delay between requests"""
+        """Enforce delay between requests with jitter to avoid predictable patterns"""
         elapsed = time.time() - self.last_request_time
-        if elapsed < self.delay:
-            sleep_time = self.delay - elapsed
+        # Add 0-50% jitter to the delay
+        jittered_delay = self.delay * (1 + random.random() * 0.5)
+        if elapsed < jittered_delay:
+            sleep_time = jittered_delay - elapsed
             logger.debug(f"Rate limiting: sleeping {sleep_time:.1f}s")
             time.sleep(sleep_time)
         self.last_request_time = time.time()
 
+    def _retry_delay(self, attempt: int) -> float:
+        """Calculate retry delay with exponential backoff and jitter"""
+        base_delay = self.delay * (self.retry_backoff ** attempt)
+        # Add 0-50% jitter
+        return base_delay * (1 + random.random() * 0.5)
+
     def fetch_page(self, url: str) -> Optional[BeautifulSoup]:
         """
-        Fetch and parse a wiki page
+        Fetch and parse a wiki page with retry logic
 
         Args:
             url: Full URL to fetch
 
         Returns:
-            BeautifulSoup object or None if fetch failed
+            BeautifulSoup object or None if fetch failed after all retries
         """
-        self._rate_limit()
+        last_error = None
 
-        try:
-            logger.debug(f"Fetching: {url}")
-            response = self.session.get(url, timeout=30)
+        for attempt in range(self.max_retries + 1):
+            self._rate_limit()
 
-            if response.status_code != 200:
-                logger.error(f"Failed to fetch {url}: HTTP {response.status_code}")
-                return None
+            # If we've had consecutive failures, add extra delay
+            if self.consecutive_failures > 0:
+                extra_delay = min(self.consecutive_failures * 10, 60)  # Cap at 60s
+                logger.info(f"Adding {extra_delay}s extra delay due to {self.consecutive_failures} consecutive failures")
+                time.sleep(extra_delay)
 
-            return BeautifulSoup(response.content, 'lxml')
+            try:
+                logger.debug(f"Fetching: {url} (attempt {attempt + 1}/{self.max_retries + 1})")
+                response = self.session.get(url, timeout=30)
 
-        except requests.RequestException as e:
-            logger.error(f"Network error fetching {url}: {e}")
-            return None
+                if response.status_code == 200:
+                    self.consecutive_failures = 0  # Reset on success
+                    return BeautifulSoup(response.content, 'lxml')
+                elif response.status_code == 429:  # Too Many Requests
+                    logger.warning(f"Rate limited (429) on {url}, backing off...")
+                    self.consecutive_failures += 1
+                    last_error = f"HTTP 429 Too Many Requests"
+                elif response.status_code >= 500:  # Server error, worth retrying
+                    logger.warning(f"Server error ({response.status_code}) on {url}, retrying...")
+                    self.consecutive_failures += 1
+                    last_error = f"HTTP {response.status_code}"
+                else:
+                    logger.error(f"Failed to fetch {url}: HTTP {response.status_code}")
+                    return None
+
+            except requests.exceptions.Timeout as e:
+                logger.warning(f"Timeout fetching {url} (attempt {attempt + 1}): {e}")
+                self.consecutive_failures += 1
+                last_error = str(e)
+            except requests.exceptions.ConnectionError as e:
+                logger.warning(f"Connection error fetching {url} (attempt {attempt + 1}): {e}")
+                self.consecutive_failures += 1
+                last_error = str(e)
+            except requests.RequestException as e:
+                logger.warning(f"Request error fetching {url} (attempt {attempt + 1}): {e}")
+                self.consecutive_failures += 1
+                last_error = str(e)
+
+            # Wait before retry with exponential backoff
+            if attempt < self.max_retries:
+                retry_wait = self._retry_delay(attempt)
+                logger.info(f"Waiting {retry_wait:.1f}s before retry...")
+                time.sleep(retry_wait)
+
+        logger.error(f"Failed to fetch {url} after {self.max_retries + 1} attempts: {last_error}")
+        return None
 
     def close(self):
         """Close the session"""
