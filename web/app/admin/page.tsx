@@ -74,7 +74,7 @@ export default function AdminPage() {
   const [eventFilter, setEventFilter] = useState('');
   const [newCharacterName, setNewCharacterName] = useState('');
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<'unassigned' | 'ready_to_process' | 'processed' | 'archived' | 'all'>('unassigned');
+  const [statusFilter, setStatusFilter] = useState<'unassigned' | 'needs_review' | 'ready_to_process' | 'processed' | 'archived' | 'all'>('unassigned');
   const [error, setError] = useState<string | null>(null);
   const [offset, setOffset] = useState(0);
   const [total, setTotal] = useState(0);
@@ -265,8 +265,10 @@ export default function AdminPage() {
       // Build query params based on status filter
       if (statusFilter === 'unassigned') {
         url += '&assigned=false';
+      } else if (statusFilter === 'needs_review') {
+        url += '&assigned=true&needs_review=true';
       } else if (statusFilter === 'ready_to_process') {
-        url += '&assigned=true&processed=false';
+        url += '&assigned=true&processed=false&needs_review=false';
       } else if (statusFilter === 'processed') {
         url += '&assigned=true&processed=true';
       } else if (statusFilter === 'archived') {
@@ -1057,7 +1059,8 @@ export default function AdminPage() {
                   className="px-4 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 >
                   <option value="unassigned">Unassigned (needs character assignment)</option>
-                  <option value="ready_to_process">Ready to Process (assigned but not processed)</option>
+                  <option value="needs_review">Needs Review (AI flagged for human review)</option>
+                  <option value="ready_to_process">Ready to Process (assigned, not processed)</option>
                   <option value="processed">Processed (live in database)</option>
                   <option value="archived">Archived (false positives)</option>
                   <option value="all">All Events</option>

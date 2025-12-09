@@ -9,6 +9,7 @@ export async function GET(request: Request) {
     const eventType = searchParams.get('type');
     const assigned = searchParams.get('assigned');
     const processed = searchParams.get('processed');
+    const needsReview = searchParams.get('needs_review');
     const search = searchParams.get('search');
     const archived = searchParams.get('archived');
 
@@ -19,8 +20,12 @@ export async function GET(request: Request) {
         re.raw_text,
         re.parsed_data,
         re.context,
+        re.surrounding_text,
         re.is_assigned,
         re.is_processed,
+        re.needs_review,
+        re.ai_confidence,
+        re.ai_reasoning,
         re.character_id,
         re.archived,
         c.order_index,
@@ -46,14 +51,24 @@ export async function GET(request: Request) {
     // If archived === 'all', no filter is applied
 
     if (assigned !== null) {
-      query += ` AND re.is_assigned = $${paramIndex}`;
-      params.push(assigned === 'true');
-      paramIndex++;
+      if (assigned === 'false') {
+        // "Unassigned" means no character_id - these need manual assignment
+        query += ` AND re.character_id IS NULL`;
+      } else {
+        // "Assigned" means has a character_id
+        query += ` AND re.character_id IS NOT NULL`;
+      }
     }
 
     if (processed !== null) {
       query += ` AND re.is_processed = $${paramIndex}`;
       params.push(processed === 'true');
+      paramIndex++;
+    }
+
+    if (needsReview !== null) {
+      query += ` AND re.needs_review = $${paramIndex}`;
+      params.push(needsReview === 'true');
       paramIndex++;
     }
 
@@ -99,14 +114,22 @@ export async function GET(request: Request) {
     }
 
     if (assigned !== null) {
-      countQuery += ` AND re.is_assigned = $${countParamIndex}`;
-      countParams.push(assigned === 'true');
-      countParamIndex++;
+      if (assigned === 'false') {
+        countQuery += ` AND re.character_id IS NULL`;
+      } else {
+        countQuery += ` AND re.character_id IS NOT NULL`;
+      }
     }
 
     if (processed !== null) {
       countQuery += ` AND re.is_processed = $${countParamIndex}`;
       countParams.push(processed === 'true');
+      countParamIndex++;
+    }
+
+    if (needsReview !== null) {
+      countQuery += ` AND re.needs_review = $${countParamIndex}`;
+      countParams.push(needsReview === 'true');
       countParamIndex++;
     }
 
