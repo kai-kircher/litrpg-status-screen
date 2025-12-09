@@ -153,12 +153,20 @@ Confidence Guidelines:
 - Below 0.70: Uncertain, needs manual review
 
 For parsed_data, extract relevant fields based on event_type:
-- class_obtained/level_up: {"class_name": "...", "level": N}
+- class_obtained: {"class_name": "..."}
+- level_up: {"class_name": "...", "level": N}
+- class_evolution: {"old_class": "...", "new_class": "..."}
+- class_consolidation: {"old_classes": ["Class1", "Class2", ...], "new_class": "..."}
+- class_removed: {"class_name": "..."}
 - skill_obtained: {"skill_name": "..."}
+- skill_change: {"old_skill": "...", "new_skill": "..."}
+- skill_consolidation: {"old_skills": ["Skill1", "Skill2", ...], "new_skill": "..."}
+- skill_removed: {"skill_name": "..."}
 - spell_obtained: {"spell_name": "..."}
-- class_evolution: {"from_class": "...", "to_class": "..."}
+- spell_removed: {"spell_name": "..."}
 - condition: {"condition_name": "..."}
-- title: {"title_name": "..."}"""
+- title: {"title_name": "..."}
+- false_positive: {"reason": "why this is not a real event"}"""
 
 
 # Knowledge update prompt (for summarizing character state)
