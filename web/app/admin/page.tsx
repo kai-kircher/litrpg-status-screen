@@ -933,8 +933,16 @@ export default function AdminPage() {
                       <button
                         onClick={() => startJob('attribute-events')}
                         className="px-3 py-1.5 text-sm bg-green-600 text-white rounded hover:bg-green-700"
+                        title="Real-time processing (faster but more expensive)"
                       >
                         Attribute Events
+                      </button>
+                      <button
+                        onClick={() => startJob('batch-attribute-events')}
+                        className="px-3 py-1.5 text-sm bg-emerald-600 text-white rounded hover:bg-emerald-700"
+                        title="Batch processing (50% cheaper, async - results within 24h)"
+                      >
+                        Batch Attribute (50% off)
                       </button>
                       <button
                         onClick={() => startJob('process-ai')}
@@ -959,17 +967,17 @@ export default function AdminPage() {
                         </button>
                         <button
                           onClick={() => performReset(
-                            'delete-all-characters',
-                            'Are you sure you want to DELETE ALL CHARACTERS? This will also delete all classes, levels, abilities, and unassign all events.'
+                            'clear-progression-data',
+                            'Are you sure you want to clear all progression data? This will delete all classes, levels, abilities, and unassign all events. Characters from the wiki will remain.'
                           )}
                           className="px-3 py-1.5 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200"
                         >
-                          Delete All Characters
+                          Clear Progression Data
                         </button>
                         <button
                           onClick={() => performReset(
                             'full-reset',
-                            'Are you sure you want to perform a FULL RESET? This will delete all characters and reset all events to unassigned/unprocessed.'
+                            'Are you sure you want to perform a FULL RESET? This will clear all progression data (classes, levels, abilities) and reset all events to unassigned/unprocessed. Wiki characters will remain.'
                           )}
                           className="px-3 py-1.5 text-sm bg-red-600 text-white rounded hover:bg-red-700"
                         >

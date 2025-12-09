@@ -18,7 +18,8 @@ function isAuthorized(request: NextRequest): boolean {
 }
 
 // Track running processes in memory (for cancellation)
-const runningJobs: Map<number, ChildProcess> = new Map();
+type RunningJob = { process: ChildProcess; containerName: string };
+const runningJobs: Map<number, RunningJob> = new Map();
 
 // GET /api/admin/jobs - List jobs
 export async function GET(request: NextRequest) {
@@ -121,6 +122,9 @@ export async function POST(request: NextRequest) {
       case 'attribute-events':
         command = buildAttributeEventsCommand(config);
         break;
+      case 'batch-attribute-events':
+        command = buildBatchAttributeEventsCommand(config);
+        break;
       case 'scrape-wiki':
         command = 'python -m src.main scrape-wiki';
         break;
@@ -131,15 +135,16 @@ export async function POST(request: NextRequest) {
         );
     }
 
-    // Run the job in a Docker container
-    const dockerCommand = buildDockerCommand(command);
+    // Run the job in a Docker container with a named container for cancellation
+    const containerName = `scraper-job-${jobId}`;
+    const dockerCommand = buildDockerCommand(command, containerName);
 
     // Spawn the process
     const child = spawn('sh', ['-c', dockerCommand], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
 
-    runningJobs.set(jobId, child);
+    runningJobs.set(jobId, { process: child, containerName });
 
     // Collect output
     let stdout = '';
@@ -222,10 +227,16 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    // Get the running process
-    const child = runningJobs.get(jobId);
-    if (child) {
-      child.kill('SIGTERM');
+    // Get the running job info
+    const runningJob = runningJobs.get(jobId);
+    if (runningJob) {
+      // Stop the Docker container - this properly terminates the job
+      try {
+        await execAsync(`docker stop ${runningJob.containerName}`);
+      } catch {
+        // Container may already be stopped, that's ok
+      }
+      runningJob.process.kill('SIGTERM');
       runningJobs.delete(jobId);
     }
 
@@ -287,14 +298,23 @@ function buildAttributeEventsCommand(config: any): string {
   return cmd;
 }
 
-function buildDockerCommand(scraperCommand: string): string {
+function buildBatchAttributeEventsCommand(config: any): string {
+  let cmd = 'python -m src.main batch-attribute-events';
+  if (config.startChapter) cmd += ` --start ${config.startChapter}`;
+  if (config.endChapter) cmd += ` --end ${config.endChapter}`;
+  if (config.dryRun) cmd += ' --dry-run';
+  return cmd;
+}
+
+function buildDockerCommand(scraperCommand: string, containerName: string): string {
   // Run the scraper command in a new Docker container
   // Using docker-compose run to inherit environment and network settings
   // The compose file is mounted into the container at /app/docker-compose.prod.yml
   // Pass ANTHROPIC_API_KEY directly since the web container has it in env
   // Use --no-deps since postgres is already running, and -p to match the existing project name
+  // Use --name so we can stop the container by name if cancelled
   const apiKey = process.env.ANTHROPIC_API_KEY || '';
-  return `docker compose -p litrpg-status-screen -f /app/docker-compose.prod.yml run --rm --no-deps -e ANTHROPIC_API_KEY="${apiKey}" scraper ${scraperCommand}`;
+  return `docker compose -p litrpg-status-screen -f /app/docker-compose.prod.yml run --rm --no-deps --name ${containerName} -e ANTHROPIC_API_KEY="${apiKey}" scraper ${scraperCommand}`;
 }
 
 async function updateJobProgress(jobId: number, output: string): Promise<void> {
