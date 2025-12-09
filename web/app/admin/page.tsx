@@ -266,7 +266,7 @@ export default function AdminPage() {
       if (statusFilter === 'unassigned') {
         url += '&assigned=false';
       } else if (statusFilter === 'needs_review') {
-        url += '&assigned=true&needs_review=true';
+        url += '&assigned=true&needs_review=true&processed=false';
       } else if (statusFilter === 'ready_to_process') {
         url += '&assigned=true&processed=false&needs_review=false';
       } else if (statusFilter === 'processed') {
