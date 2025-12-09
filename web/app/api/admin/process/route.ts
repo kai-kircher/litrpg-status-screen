@@ -96,6 +96,19 @@ export async function POST(request: Request) {
           case 'other':
             result = await processOtherEvent(client, event);
             break;
+          case 'false_positive':
+            // Archive false positives - they're not real progression events
+            await client.query(
+              'UPDATE raw_events SET is_processed = true, archived = true WHERE id = $1',
+              [event.id]
+            );
+            results.push({
+              eventId: event.id,
+              eventType: event.event_type,
+              rawText: event.raw_text,
+              data: { archived: true, reason: 'false_positive' }
+            });
+            continue; // Skip the normal "mark as processed" step since we already did it
           default:
             errors.push({
               eventId: event.id,
