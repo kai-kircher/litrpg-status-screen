@@ -93,7 +93,6 @@ export async function POST(request: Request) {
           case 'aspect':
           case 'title':
           case 'rank':
-          case 'other':
             result = await processOtherEvent(client, event);
             // Check if processOtherEvent detected this as a skill mention to archive
             if (result?.archived) {
@@ -110,6 +109,19 @@ export async function POST(request: Request) {
               continue; // Skip the normal processing
             }
             break;
+          case 'other':
+            // Archive "other" type events - they're typically not real progression events
+            await client.query(
+              'UPDATE raw_events SET is_processed = true, archived = true, needs_review = false WHERE id = $1',
+              [event.id]
+            );
+            results.push({
+              eventId: event.id,
+              eventType: event.event_type,
+              rawText: event.raw_text,
+              data: { archived: true, reason: 'other_event_type' }
+            });
+            continue;
           case 'false_positive':
             // Archive false positives - they're not real progression events
             await client.query(
