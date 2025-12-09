@@ -755,12 +755,15 @@ IMPORTANT:
                 character_id = self._get_character_id(character_name) if character_name else None
 
                 # Determine acceptance
+                # Only auto-accept if confidence is high AND we found a character
+                # Events without a character_id need manual review to assign one
                 if event_type == 'false_positive':
                     auto_accepted = False
                     needs_review = True
                 else:
-                    auto_accepted = confidence >= AUTO_ACCEPT_THRESHOLD
-                    needs_review = confidence < AUTO_ACCEPT_THRESHOLD
+                    has_character = character_id is not None
+                    auto_accepted = confidence >= AUTO_ACCEPT_THRESHOLD and has_character
+                    needs_review = not auto_accepted
 
                 attributions.append(EventAttribution(
                     event_id=event_id,
