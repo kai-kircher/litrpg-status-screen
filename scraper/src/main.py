@@ -450,7 +450,7 @@ def attribute_events(start, end, chapter, dry_run):
                   AND EXISTS (
                       SELECT 1 FROM raw_events re
                       WHERE re.chapter_id = c.id
-                        AND re.ai_confidence IS NULL
+                        AND (re.ai_confidence IS NULL OR re.needs_review = TRUE)
                         AND re.archived = FALSE
                   )
             """
@@ -476,11 +476,7 @@ def attribute_events(start, end, chapter, dry_run):
 
         # Initialize
         cost_tracker = CostTracker()
-        extractor = CharacterExtractor(cost_tracker=cost_tracker)
-        attributor = EventAttributor(
-            cost_tracker=cost_tracker,
-            character_extractor=extractor
-        )
+        attributor = EventAttributor(cost_tracker=cost_tracker)
 
         total_events = 0
         total_auto_accepted = 0
@@ -496,11 +492,10 @@ def attribute_events(start, end, chapter, dry_run):
 
                 logging.info(f"Chapter {order_index} ({chapter_number}): {len(events)} events to process")
 
-                # Get characters mentioned in this chapter (from cache/db)
-                # For now, use all known characters
+                # Get characters from wiki
                 conn = get_connection()
                 cursor = conn.cursor()
-                cursor.execute("SELECT name FROM characters ORDER BY name")
+                cursor.execute("SELECT name FROM wiki_characters ORDER BY name")
                 chapter_characters = [row[0] for row in cursor.fetchall()]
                 cursor.close()
                 return_connection(conn)
@@ -623,11 +618,7 @@ def process_ai(start, end, chapter, dry_run):
 
         # Initialize
         cost_tracker = CostTracker()
-        extractor = CharacterExtractor(cost_tracker=cost_tracker)
-        attributor = EventAttributor(
-            cost_tracker=cost_tracker,
-            character_extractor=extractor
-        )
+        attributor = EventAttributor(cost_tracker=cost_tracker)
 
         stats = {
             'chapters': 0,
@@ -1210,7 +1201,7 @@ def batch_attribute_events(start, end, dry_run):
               AND EXISTS (
                   SELECT 1 FROM raw_events re
                   WHERE re.chapter_id = c.id
-                    AND re.ai_confidence IS NULL
+                    AND (re.ai_confidence IS NULL OR re.needs_review = TRUE)
                     AND re.archived = FALSE
               )
         """
@@ -1223,8 +1214,8 @@ def batch_attribute_events(start, end, dry_run):
 
         chapters_info = cursor.fetchall()
 
-        # Get characters for each chapter
-        cursor.execute("SELECT name FROM characters ORDER BY name")
+        # Get characters from wiki
+        cursor.execute("SELECT name FROM wiki_characters ORDER BY name")
         all_characters = [row[0] for row in cursor.fetchall()]
 
         cursor.close()
