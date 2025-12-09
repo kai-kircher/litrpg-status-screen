@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     // Process each event
     for (const event of events) {
       try {
-        if (!event.is_assigned || !event.character_id) {
+        if (!event.character_id) {
           errors.push({
             eventId: event.id,
             error: 'Event must be assigned to a character first',
