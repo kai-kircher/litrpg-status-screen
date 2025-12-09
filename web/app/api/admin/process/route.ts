@@ -95,6 +95,20 @@ export async function POST(request: Request) {
           case 'rank':
           case 'other':
             result = await processOtherEvent(client, event);
+            // Check if processOtherEvent detected this as a skill mention to archive
+            if (result?.archived) {
+              await client.query(
+                'UPDATE raw_events SET is_processed = true, archived = true, needs_review = false WHERE id = $1',
+                [event.id]
+              );
+              results.push({
+                eventId: event.id,
+                eventType: event.event_type,
+                rawText: event.raw_text,
+                data: result
+              });
+              continue; // Skip the normal processing
+            }
             break;
           case 'false_positive':
             // Archive false positives - they're not real progression events
@@ -486,7 +500,26 @@ async function processAbilityRemoved(client: any, event: any, type: 'skill' | 's
 
 async function processOtherEvent(client: any, event: any) {
   // For condition, aspect, title, rank, and other event types
-  // Store them as 'skill' type abilities so they appear in the UI
+
+  // Check if this is a skill mention/activation rather than a progression event
+  // These should be archived, not added to the character's skill list
+  const context = event.parsed_data?.context?.toLowerCase() || '';
+  const reason = event.parsed_data?.reason?.toLowerCase() || '';
+  const isSkillMention =
+    context.includes('mention') ||
+    context.includes('activation') ||
+    context.includes('not a progression') ||
+    context.includes('not progression') ||
+    reason.includes('mention') ||
+    reason.includes('activation') ||
+    reason.includes('not progression') ||
+    reason.includes('not a progression') ||
+    event.parsed_data?.skills; // Array of skills = multiple activations, not progressions
+
+  if (isSkillMention) {
+    // Archive these like false positives - they're not real progression events
+    return { archived: true, reason: 'skill_mention_not_progression' };
+  }
 
   // Extract the name from parsed_data based on event type
   let abilityName = event.parsed_data?.name ||
