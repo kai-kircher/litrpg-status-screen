@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import json
+import re
 from typing import Optional, Dict, Any, List, Generator
 from dataclasses import dataclass
 from enum import Enum
@@ -15,6 +16,81 @@ from anthropic.types.messages.batch_create_params import Request
 from .client import AIError, MODEL_PRICING, DEFAULT_MODEL
 
 logger = logging.getLogger(__name__)
+
+
+def repair_json(json_str: str) -> str:
+    """Attempt to repair common JSON issues from LLM output.
+
+    Common issues:
+    - Trailing commas before closing braces/brackets
+    - Unquoted property names
+    - Single quotes instead of double quotes
+    - Extra data after the JSON (LLM continues writing)
+    - Truncated JSON (try to close it)
+    """
+    # Remove any markdown code block wrapping
+    if json_str.startswith('```'):
+        lines = json_str.split('\n')
+        # Find the end of the code block
+        end_idx = len(lines)
+        for i in range(1, len(lines)):
+            if lines[i].strip() == '```':
+                end_idx = i
+                break
+        json_str = '\n'.join(lines[1:end_idx])
+
+    # Try to find where the main JSON object/array ends
+    # Look for the last balanced closing brace/bracket
+    depth = 0
+    in_string = False
+    escape_next = False
+    last_close = -1
+
+    for i, char in enumerate(json_str):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char in '{[':
+            depth += 1
+        elif char in '}]':
+            depth -= 1
+            if depth == 0:
+                last_close = i
+                break
+
+    # Truncate at the end of the main JSON structure
+    if last_close > 0 and last_close < len(json_str) - 1:
+        json_str = json_str[:last_close + 1]
+
+    # Fix trailing commas (before } or ])
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+    # Fix single quotes to double quotes (simple cases)
+    # Be careful not to break strings that contain apostrophes
+    # Only do this if the JSON doesn't parse
+    try:
+        json.loads(json_str)
+        return json_str
+    except json.JSONDecodeError:
+        pass
+
+    # Try replacing single quotes with double quotes for property names
+    # Pattern: 'property_name': -> "property_name":
+    json_str = re.sub(r"'([^']+)'(\s*:)", r'"\1"\2', json_str)
+
+    # Try replacing single quotes with double quotes for string values
+    # Pattern: : 'value' -> : "value"
+    json_str = re.sub(r":\s*'([^']*)'", r': "\1"', json_str)
+
+    return json_str
 
 
 class BatchStatus(Enum):
@@ -294,13 +370,20 @@ class BatchClient:
             parsed_json = None
             if expect_json and content:
                 try:
+                    # First try parsing as-is
                     json_content = content
                     if json_content.startswith('```'):
                         lines = json_content.split('\n')
                         json_content = '\n'.join(lines[1:-1])
                     parsed_json = json.loads(json_content)
-                except json.JSONDecodeError as e:
-                    logger.warning(f"Failed to parse JSON for {custom_id}: {e}")
+                except json.JSONDecodeError:
+                    # Try repairing the JSON
+                    try:
+                        repaired = repair_json(content)
+                        parsed_json = json.loads(repaired)
+                        logger.debug(f"Repaired JSON for {custom_id}")
+                    except json.JSONDecodeError as e:
+                        logger.warning(f"Failed to parse JSON for {custom_id}: {e}")
 
             return BatchResult(
                 custom_id=custom_id,

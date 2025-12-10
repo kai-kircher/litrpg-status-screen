@@ -4,6 +4,7 @@ import os
 import time
 import logging
 import json
+import re
 from typing import Optional, Dict, Any, List
 from dataclasses import dataclass
 
@@ -11,6 +12,65 @@ import anthropic
 from anthropic import APIError, RateLimitError, APIConnectionError
 
 logger = logging.getLogger(__name__)
+
+
+def repair_json(json_str: str) -> str:
+    """Attempt to repair common JSON issues from LLM output."""
+    # Remove any markdown code block wrapping
+    if json_str.startswith('```'):
+        lines = json_str.split('\n')
+        end_idx = len(lines)
+        for i in range(1, len(lines)):
+            if lines[i].strip() == '```':
+                end_idx = i
+                break
+        json_str = '\n'.join(lines[1:end_idx])
+
+    # Find where the main JSON object/array ends
+    depth = 0
+    in_string = False
+    escape_next = False
+    last_close = -1
+
+    for i, char in enumerate(json_str):
+        if escape_next:
+            escape_next = False
+            continue
+        if char == '\\' and in_string:
+            escape_next = True
+            continue
+        if char == '"' and not escape_next:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if char in '{[':
+            depth += 1
+        elif char in '}]':
+            depth -= 1
+            if depth == 0:
+                last_close = i
+                break
+
+    # Truncate at the end of the main JSON structure
+    if last_close > 0 and last_close < len(json_str) - 1:
+        json_str = json_str[:last_close + 1]
+
+    # Fix trailing commas
+    json_str = re.sub(r',(\s*[}\]])', r'\1', json_str)
+
+    # Try parsing
+    try:
+        json.loads(json_str)
+        return json_str
+    except json.JSONDecodeError:
+        pass
+
+    # Try fixing single quotes
+    json_str = re.sub(r"'([^']+)'(\s*:)", r'"\1"\2', json_str)
+    json_str = re.sub(r":\s*'([^']*)'", r': "\1"', json_str)
+
+    return json_str
 
 
 class AIError(Exception):
@@ -127,13 +187,18 @@ class AIClient:
                         # Handle potential markdown code blocks
                         json_content = content
                         if json_content.startswith('```'):
-                            # Remove markdown code block
                             lines = json_content.split('\n')
                             json_content = '\n'.join(lines[1:-1])
                         parsed_json = json.loads(json_content)
-                    except json.JSONDecodeError as e:
-                        logger.warning(f"Failed to parse JSON response: {e}")
-                        logger.debug(f"Raw content: {content[:500]}")
+                    except json.JSONDecodeError:
+                        # Try repairing the JSON
+                        try:
+                            repaired = repair_json(content)
+                            parsed_json = json.loads(repaired)
+                            logger.debug(f"Repaired JSON response")
+                        except json.JSONDecodeError as e:
+                            logger.warning(f"Failed to parse JSON response: {e}")
+                            logger.debug(f"Raw content: {content[:500]}")
 
                 # Track usage
                 input_tokens = response.usage.input_tokens
